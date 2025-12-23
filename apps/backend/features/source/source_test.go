@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/features/source"
+	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/settings"
 )
 
 type MockRepo struct {
@@ -66,10 +68,33 @@ func (m *MockPublisher) Publish(topic string, body []byte) error {
 	return args.Error(0)
 }
 
+type MockChunkStore struct {
+	mock.Mock
+}
+
+func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
+	args := m.Called(ctx, sourceID)
+	return args.Get(0).([]worker.Chunk), args.Error(1)
+}
+
+type MockSettingsService struct {
+	mock.Mock
+}
+
+func (m *MockSettingsService) Get(ctx context.Context) (*settings.Settings, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*settings.Settings), args.Error(1)
+}
+
 func TestCreateSource(t *testing.T) {
 	repo := new(MockRepo)
 	pub := new(MockPublisher)
-	svc := source.NewService(repo, pub)
+	chunkStore := new(MockChunkStore)
+	settingsMock := new(MockSettingsService)
+	svc := source.NewService(repo, pub, chunkStore, settingsMock)
 	
 	src := &source.Source{URL: "https://example.com"}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(src.URL)))
@@ -82,19 +107,29 @@ func TestCreateSource(t *testing.T) {
 		return s.URL == src.URL && s.ContentHash == hash
 	})).Return(nil)
 	
+	// Expect Settings -> success
+	settingsMock.On("Get", mock.Anything).Return(&settings.Settings{GeminiAPIKey: "test-key"}, nil)
+
 	// Expect Publish -> success
-	pub.On("Publish", "ingest", mock.Anything).Return(nil)
+	pub.On("Publish", "ingest.task", mock.MatchedBy(func(body []byte) bool {
+		var p map[string]interface{}
+		json.Unmarshal(body, &p)
+		return p["gemini_api_key"] == "test-key"
+	})).Return(nil)
 	
 	err := svc.Create(context.Background(), src)
 	assert.NoError(t, err)
 	repo.AssertExpectations(t)
 	pub.AssertExpectations(t)
+	settingsMock.AssertExpectations(t)
 }
 
 func TestCreateSource_Duplicate(t *testing.T) {
 	repo := new(MockRepo)
 	pub := new(MockPublisher)
-	svc := source.NewService(repo, pub)
+	chunkStore := new(MockChunkStore)
+	settingsMock := new(MockSettingsService)
+	svc := source.NewService(repo, pub, chunkStore, settingsMock)
 	
 	src := &source.Source{URL: "https://duplicate.com"}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(src.URL)))
@@ -115,7 +150,9 @@ func TestCreateSource_Duplicate(t *testing.T) {
 func TestDeleteSource(t *testing.T) {
 	repo := new(MockRepo)
 	pub := new(MockPublisher)
-	svc := source.NewService(repo, pub)
+	chunkStore := new(MockChunkStore)
+	settingsMock := new(MockSettingsService)
+	svc := source.NewService(repo, pub, chunkStore, settingsMock)
 
 	id := "some-id"
 	repo.On("SoftDelete", mock.Anything, id).Return(nil)
@@ -128,13 +165,21 @@ func TestDeleteSource(t *testing.T) {
 func TestReSyncSource(t *testing.T) {
 	repo := new(MockRepo)
 	pub := new(MockPublisher)
-	svc := source.NewService(repo, pub)
+	chunkStore := new(MockChunkStore)
+	settingsMock := new(MockSettingsService)
+	svc := source.NewService(repo, pub, chunkStore, settingsMock)
 
 	id := "some-id"
 	src := &source.Source{ID: id, URL: "http://example.com"}
 
 	repo.On("Get", mock.Anything, id).Return(src, nil)
-	pub.On("Publish", "ingest", mock.Anything).Return(nil)
+	settingsMock.On("Get", mock.Anything).Return(&settings.Settings{GeminiAPIKey: "test-key"}, nil)
+	
+	pub.On("Publish", "ingest.task", mock.MatchedBy(func(body []byte) bool {
+		var p map[string]interface{}
+		json.Unmarshal(body, &p)
+		return p["resync"] == true && p["gemini_api_key"] == "test-key"
+	})).Return(nil)
 
 	err := svc.ReSync(context.Background(), id)
 	assert.NoError(t, err)
@@ -144,7 +189,9 @@ func TestReSyncSource(t *testing.T) {
 func TestCreateSource_WithConfig(t *testing.T) {
 	repo := new(MockRepo)
 	pub := new(MockPublisher)
-	svc := source.NewService(repo, pub)
+	chunkStore := new(MockChunkStore)
+	settingsMock := new(MockSettingsService)
+	svc := source.NewService(repo, pub, chunkStore, settingsMock)
 	
 	src := &source.Source{
 		URL:        "https://example.com",
@@ -155,8 +202,9 @@ func TestCreateSource_WithConfig(t *testing.T) {
 
 	repo.On("ExistsByHash", mock.Anything, hash).Return(false, nil)
 	repo.On("Save", mock.Anything, mock.Anything).Return(nil)
+	settingsMock.On("Get", mock.Anything).Return(&settings.Settings{}, nil)
 	
-	pub.On("Publish", "ingest", mock.MatchedBy(func(body []byte) bool {
+	pub.On("Publish", "ingest.task", mock.MatchedBy(func(body []byte) bool {
 		var p map[string]interface{}
 		json.Unmarshal(body, &p)
 		

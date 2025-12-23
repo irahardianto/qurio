@@ -1,13 +1,12 @@
-**Status:** MVP Refactoring Phase - Complete.
+**Status:** MVP Refactoring Phase - Stabilizing Crawler.
 - **Completed:**
     - Core Architecture (Go/Weaviate/Postgres/Vue)
-    - Source CRUD
-    - Settings Management
+    - Source CRUD & Settings
     - Retrieval (MCP)
-    - **Refactor:** Distributed Ingestion (Python/NSQ) implemented and stable.
-    - **Worker:** Python 3.14, pynsq/Tornado, Crawl4AI, Docling.
+    - Distributed Ingestion (Basic)
+    - **Backend & Worker Crawler Integration** (Recursive/Exclusions, Dynamic Config, Gemini 3)
 - **In Progress:**
-    - Advanced Filtering.
+    - Testing & Optimization of deep crawls.
 - **Next:**
     - Query Observability.
-    - User Auth (maybe).
+    - User Auth.

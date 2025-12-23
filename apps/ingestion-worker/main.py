@@ -25,6 +25,16 @@ def handle_message(message):
 
 async def process_message(message):
     global producer
+    
+    # Keep message alive
+    stop_touch = asyncio.Event()
+    async def touch_loop():
+        while not stop_touch.is_set():
+            message.touch()
+            await asyncio.sleep(30)
+            
+    touch_task = asyncio.create_task(touch_loop())
+
     try:
         data = json.loads(message.body)
         logger.info(f"Received message: {data}")
@@ -32,39 +42,35 @@ async def process_message(message):
         result_content = None
         source_id = data.get('id')
         task_type = data.get('type')
+        results_list = []
         
         if task_type == 'web':
             url = data.get('url')
-            depth = data.get('depth', 1)
-            # exclusions = data.get('exclusions', [])
-            result_content = await handle_web_task(url, max_depth=depth)
+            max_depth = data.get('max_depth', 0)
+            exclusions = data.get('exclusions', [])
+            api_key = data.get('gemini_api_key')
+            # Returns list of dicts: [{"url": "...", "content": "..."}]
+            results_list = await handle_web_task(url, max_depth=max_depth, exclusions=exclusions, api_key=api_key)
         
         elif task_type == 'file':
             file_path = data.get('path')
-            result_content = await handle_file_task(file_path)
+            content = await handle_file_task(file_path)
+            # Use path as URL for files
+            results_list = [{"url": file_path, "content": content}]
             
-        if result_content and producer:
-            # Re-construct result payload
-            url = data.get('url')
-            if task_type == 'file':
-                url = data.get('path') # Use path as URL for files if url missing
-            
-            result_payload = {
-                "source_id": source_id,
-                "content": result_content,
-                "url": url
-            }
-            
-            # producer.pub is async-ish in pynsq? No, pynsq Writer.pub is callback based.
-            # But we can wrap it or just fire and forget if we don't care about ack immediately.
-            # Actually, we should wait for pub success before finishing message if we want guarantees.
-            # For MVP, let's just publish.
-            
-            producer.pub(
-                settings.nsq_topic_result,
-                json.dumps(result_payload).encode('utf-8'),
-                callback=lambda c, d: logger.info(f"Published result for {source_id}")
-            )
+        if results_list and producer:
+            for res in results_list:
+                result_payload = {
+                    "source_id": source_id,
+                    "content": res['content'],
+                    "url": res['url']
+                }
+                
+                producer.pub(
+                    settings.nsq_topic_result,
+                    json.dumps(result_payload).encode('utf-8'),
+                    callback=lambda c, d: logger.info(f"Published result for {source_id} - {res.get('url')}")
+                )
             
         message.finish()
         
@@ -73,6 +79,9 @@ async def process_message(message):
         # message.requeue() # pynsq handles requeue on timeout if not finished? 
         # Or explicit requeue:
         message.requeue(delay=10)
+    finally:
+        stop_touch.set()
+        await touch_task
 
 def main():
     logger.info("Ingestion Worker Starting...")

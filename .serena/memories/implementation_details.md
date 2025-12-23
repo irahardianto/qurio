@@ -3,11 +3,13 @@
 -   **Configuration:**
     -   `MaxDepth` (int): 0 = Single page, >0 = Recursive.
     -   `Exclusions` ([]string): Regex patterns to skip URLs.
+    -   **API Key Injection:** Backend fetches `GeminiAPIKey` from DB settings and injects it into the `ingest.task` payload. Worker extracts and uses this key for `LLMContentFilter`, ensuring dynamic configuration without environment variable dependencies on the worker side.
 -   **Pipeline:**
-    -   **Producer (Go):** Publishes `{ type, url, id, depth, exclusions }` to `ingest.task` topic.
+    -   **Producer (Go):** Publishes `{ type, url, id, max_depth, exclusions, gemini_api_key }` to `ingest.task` topic.
     -   **Worker (Python):**
         -   Consumes `ingest.task` using `pynsq.Reader`.
-        -   **Web:** Uses `crawl4ai` (AsyncWebCrawler) to crawl and extract Markdown.
+        -   **Web:** Uses `crawl4ai` (AsyncWebCrawler) with `BFSDeepCrawlStrategy` for recursive crawling.
+        -   **Filters:** Applies `URLPatternFilter` (exclusions), `LLMContentFilter` (Gemini, using injected key), and `PruningContentFilter`.
         -   **File:** Uses `docling` (DocumentConverter) to convert documents to Markdown.
         -   Publishes `{ source_id, content, url }` to `ingest.result` topic using `pynsq.Writer`.
     -   **Result Consumer (Go):**

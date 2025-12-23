@@ -1,5 +1,5 @@
 pynsq==0.9.1
-crawl4ai
+crawl4ai[google]
 docling
 python-snappy
 uvloop

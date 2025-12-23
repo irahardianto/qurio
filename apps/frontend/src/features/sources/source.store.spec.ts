@@ -52,7 +52,12 @@ describe('Source Store', () => {
 
   it('addSource posts to API and updates state on success', async () => {
     const store = useSourceStore()
-    const newSourceInput = { name: 'New Source', url: 'http://example.com' }
+    const newSourceInput = { 
+      name: 'New Source', 
+      url: 'http://example.com',
+      max_depth: 2,
+      exclusions: ['/admin']
+    }
     const createdSource = { id: '2', ...newSourceInput }
     
     global.fetch = vi.fn().mockResolvedValue({

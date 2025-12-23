@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/settings"
 )
 
 type Source struct {
@@ -38,14 +39,19 @@ type EventPublisher interface {
 	Publish(topic string, body []byte) error
 }
 
+type SettingsService interface {
+	Get(ctx context.Context) (*settings.Settings, error)
+}
+
 type Service struct {
 	repo       Repository
 	pub        EventPublisher
 	chunkStore ChunkStore
+	settings   SettingsService
 }
 
-func NewService(repo Repository, pub EventPublisher, chunkStore ChunkStore) *Service {
-	return &Service{repo: repo, pub: pub, chunkStore: chunkStore}
+func NewService(repo Repository, pub EventPublisher, chunkStore ChunkStore, settings SettingsService) *Service {
+	return &Service{repo: repo, pub: pub, chunkStore: chunkStore, settings: settings}
 }
 
 func (s *Service) Create(ctx context.Context, src *Source) error {
@@ -67,13 +73,21 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		return err
 	}
 
-	// 3. Publish to NSQ
+	// 3. Get Settings
+	set, err := s.settings.Get(ctx)
+	apiKey := ""
+	if err == nil && set != nil {
+		apiKey = set.GeminiAPIKey
+	}
+
+	// 4. Publish to NSQ
 	payload, _ := json.Marshal(map[string]interface{}{
-		"type":       "web",
-		"url":        src.URL,
-		"id":         src.ID,
-		"depth":      src.MaxDepth,
-		"exclusions": src.Exclusions,
+		"type":           "web",
+		"url":            src.URL,
+		"id":             src.ID,
+		"max_depth":      src.MaxDepth,
+		"exclusions":     src.Exclusions,
+		"gemini_api_key": apiKey,
 	})
 	if err := s.pub.Publish("ingest.task", payload); err != nil {
 		slog.Error("failed to publish ingest.task event", "error", err)
@@ -123,13 +137,20 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		return err
 	}
 
+	set, err := s.settings.Get(ctx)
+	apiKey := ""
+	if err == nil && set != nil {
+		apiKey = set.GeminiAPIKey
+	}
+
 	payload, _ := json.Marshal(map[string]interface{}{
-		"type":       "web",
-		"url":        src.URL,
-		"id":         src.ID,
-		"resync":     true,
-		"depth":      src.MaxDepth,
-		"exclusions": src.Exclusions,
+		"type":           "web",
+		"url":            src.URL,
+		"id":             src.ID,
+		"resync":         true,
+		"max_depth":      src.MaxDepth,
+		"exclusions":     src.Exclusions,
+		"gemini_api_key": apiKey,
 	})
 	if err := s.pub.Publish("ingest.task", payload); err != nil {
 		slog.Error("failed to publish resync event", "error", err)

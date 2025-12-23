@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch, ANY
 from handlers.web import handle_web_task
 from handlers.file import handle_file_task
 
@@ -9,6 +9,7 @@ async def test_handle_web_task_success():
     mock_result = MagicMock()
     mock_result.success = True
     mock_result.markdown = "# Test Content"
+    mock_result.url = "http://example.com"
     
     # Mock crawler
     mock_crawler = AsyncMock()
@@ -22,8 +23,11 @@ async def test_handle_web_task_success():
     with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
         result = await handle_web_task("http://example.com")
         
-        assert result == "# Test Content"
-        mock_crawler.arun.assert_called_with(url="http://example.com")
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["content"] == "# Test Content"
+        assert result[0]["url"] == "http://example.com"
+        mock_crawler.arun.assert_called_with(url="http://example.com", config=ANY)
 
 @pytest.mark.asyncio
 async def test_handle_web_task_failure():

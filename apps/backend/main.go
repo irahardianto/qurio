@@ -168,15 +168,15 @@ func main() {
 		}
 	}()
 
-	// Feature: Source
-	sourceRepo := source.NewPostgresRepo(db)
-	sourceService := source.NewService(sourceRepo, nsqProducer, vecStore)
-	sourceHandler := source.NewHandler(sourceService)
-
 	// Feature: Settings
 	settingsRepo := settings.NewPostgresRepo(db)
 	settingsService := settings.NewService(settingsRepo)
 	settingsHandler := settings.NewHandler(settingsService)
+
+	// Feature: Source
+	sourceRepo := source.NewPostgresRepo(db)
+	sourceService := source.NewService(sourceRepo, nsqProducer, vecStore, settingsService)
+	sourceHandler := source.NewHandler(sourceService)
 
 	// Adapters: Dynamic
 	geminiEmbedder := gemini.NewDynamicEmbedder(settingsService)

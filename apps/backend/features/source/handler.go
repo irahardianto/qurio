@@ -18,14 +18,20 @@ func NewHandler(service *Service) *Handler {
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		URL string `json:"url"`
+		URL        string   `json:"url"`
+		MaxDepth   int      `json:"max_depth"`
+		Exclusions []string `json:"exclusions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	src := &Source{URL: req.URL}
+	src := &Source{
+		URL:        req.URL,
+		MaxDepth:   req.MaxDepth,
+		Exclusions: req.Exclusions,
+	}
 	if err := h.service.Create(r.Context(), src); err != nil {
 		if err.Error() == "Duplicate detected" {
 			h.writeError(w, "CONFLICT", err.Error(), http.StatusConflict)

@@ -16,7 +16,7 @@ services:
       start_period: 10s
   
   postgres:
-    image: postgres:18-alpine
+    image: postgres:16-alpine
     ports: ["5432:5432"]
     environment:
       POSTGRES_USER: qurio
@@ -58,6 +58,7 @@ services:
     environment:
       - NSQ_LOOKUPD_HTTP=nsqlookupd:4161
       - NSQD_TCP_ADDRESS=nsqd:4150
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - /tmp/qurio-uploads:/tmp/qurio-uploads
   
