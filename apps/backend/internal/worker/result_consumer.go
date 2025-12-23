@@ -30,6 +30,8 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		SourceID string `json:"source_id"`
 		Content  string `json:"content"`
 		URL      string `json:"url"`
+		Status   string `json:"status,omitempty"` // "success" or "failed"
+		Error    string `json:"error,omitempty"`
 	}
 	if err := json.Unmarshal(m.Body, &payload); err != nil {
 		slog.Error("invalid message format", "error", err)
@@ -37,6 +39,15 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	ctx := context.Background()
+	
+	if payload.Status == "failed" {
+		slog.Error("ingestion failed", "source_id", payload.SourceID, "error", payload.Error)
+		if err := h.updater.UpdateStatus(ctx, payload.SourceID, "failed"); err != nil {
+			slog.Warn("failed to update status to failed", "error", err)
+		}
+		return nil
+	}
+
 	slog.Info("received result", "source_id", payload.SourceID, "content_len", len(payload.Content))
 
 	// 1. Update Hash

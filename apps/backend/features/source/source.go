@@ -68,7 +68,8 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		return fmt.Errorf("Duplicate detected")
 	}
 
-	// 2. Save to DB
+	// 2. Set Status to in_progress (queued) and Save
+	src.Status = "in_progress"
 	if err := s.repo.Save(ctx, src); err != nil {
 		return err
 	}
@@ -134,6 +135,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 func (s *Service) ReSync(ctx context.Context, id string) error {
 	src, err := s.repo.Get(ctx, id)
 	if err != nil {
+		return err
+	}
+
+	// Update Status to in_progress
+	if err := s.repo.UpdateStatus(ctx, id, "in_progress"); err != nil {
 		return err
 	}
 

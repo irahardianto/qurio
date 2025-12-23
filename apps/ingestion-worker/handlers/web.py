@@ -1,13 +1,14 @@
-import logging
+import asyncio
+import structlog
 import json
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, LLMConfig
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.content_filter_strategy import PruningContentFilter, LLMContentFilter
-from crawl4ai.deep_crawling.filters import URLPatternFilter
+from crawl4ai.deep_crawling.filters import URLPatternFilter, FilterChain
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from config import settings as app_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 INSTRUCTION = """
     Extract technical content from this software documentation page.
@@ -38,7 +39,7 @@ async def handle_web_task(url: str, max_depth: int = 0, exclusions: list[str] = 
     """
     Crawls a website recursively and returns a list of dictionaries containing url and content.
     """
-    logger.info(f"Starting crawl for {url} with depth {max_depth}")
+    logger.info("crawl_starting", url=url, depth=max_depth)
     
     if exclusions is None:
         exclusions = []
@@ -51,7 +52,8 @@ async def handle_web_task(url: str, max_depth: int = 0, exclusions: list[str] = 
     
     llm_config = LLMConfig(
         provider="gemini/gemini-3-flash-preview", 
-        api_token=token
+        api_token=token,
+        temperature=1.0
     )
 
     llm_filter = LLMContentFilter(
@@ -67,11 +69,18 @@ async def handle_web_task(url: str, max_depth: int = 0, exclusions: list[str] = 
     )
 
     # Configure Strategy
-    deep_crawl_strategy = BFSDeepCrawlStrategy(
-        max_depth=max_depth,
-        include_external=False
-        # url_filter=url_filter # Removed due to unexpected keyword argument error
-    ) if max_depth > 0 else None
+    if max_depth > 0:
+        # Ensure filter_chain is always a FilterChain instance, even if empty
+        filters = [url_filter] if url_filter else []
+        filter_chain = FilterChain(filters)
+        
+        deep_crawl_strategy = BFSDeepCrawlStrategy(
+            max_depth=max_depth,
+            include_external=False,
+            filter_chain=filter_chain
+        )
+    else:
+        deep_crawl_strategy = None
 
     md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
 
@@ -84,21 +93,43 @@ async def handle_web_task(url: str, max_depth: int = 0, exclusions: list[str] = 
     )
     
     # Initialize crawler
-    async with AsyncWebCrawler(verbose=True) as crawler:
-        if max_depth > 0:
-            # Recursive crawl
-            results = []
-            run_results = await crawler.arun_many(urls=[url], config=config)
-            for result in run_results:
-                if result.success:
-                    results.append({"url": result.url, "content": result.markdown})
-                else:
-                    logger.error(f"Crawl failed for {result.url}: {result.error_message}")
-            return results
-        else:
-            # Single page crawl
-            result = await crawler.arun(url=url, config=config)
-            if not result.success:
-                logger.error(f"Crawl failed for {url}: {result.error_message}")
-                raise Exception(f"Crawl failed: {result.error_message}")
-            return [{"url": result.url, "content": result.markdown}]
+    try:
+        async with AsyncWebCrawler(verbose=True) as crawler:
+            if max_depth > 0:
+                # Recursive crawl
+                results = []
+                # Calculate timeout based on depth: 60s + 60s per depth level
+                recursive_timeout = 60.0 + (max_depth * 60.0)
+                
+                # Use arun() instead of arun_many() for deep crawl, returns list of results
+                run_results = await asyncio.wait_for(
+                    crawler.arun(url=url, config=config),
+                    timeout=recursive_timeout
+                )
+                
+                # Verify we got a list
+                if not isinstance(run_results, list):
+                    run_results = [run_results]
+
+                for result in run_results:
+                    if result.success:
+                        results.append({"url": result.url, "content": result.markdown})
+                    else:
+                        logger.error("crawl_failed", url=result.url, error=result.error_message)
+                return results
+            else:
+                # Single page crawl
+                result = await asyncio.wait_for(
+                    crawler.arun(url=url, config=config),
+                    timeout=60.0
+                )
+                if not result.success:
+                    logger.error("crawl_failed", url=url, error=result.error_message)
+                    raise Exception(f"Crawl failed: {result.error_message}")
+                return [{"url": result.url, "content": result.markdown}]
+    except asyncio.TimeoutError:
+        logger.error("crawl_timeout", url=url)
+        raise
+    except Exception as e:
+        logger.error("crawl_exception", url=url, error=str(e))
+        raise

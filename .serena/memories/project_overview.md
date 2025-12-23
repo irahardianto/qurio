@@ -1,12 +1,14 @@
-**Status:** MVP Refactoring Phase - Stabilizing Crawler.
+**Status:** MVP Refactoring Phase - Technical Compliance & Stabilization Complete.
 - **Completed:**
     - Core Architecture (Go/Weaviate/Postgres/Vue)
     - Source CRUD & Settings
     - Retrieval (MCP)
     - Distributed Ingestion (Basic)
     - **Backend & Worker Crawler Integration** (Recursive/Exclusions, Dynamic Config, Gemini 3)
+    - **Part 3.5: Technical Compliance** (Logging/Errors/Timeouts)
+    - **Stabilization:** Recursive crawling fixes, Status lifecycle improvements, Docker config cleanup.
 - **In Progress:**
-    - Testing & Optimization of deep crawls.
+    - Planning for User Auth & Observability.
 - **Next:**
-    - Query Observability.
-    - User Auth.
+    - Query Observability (Deep Dive).
+    - User Authentication (Auth0/OIDC).

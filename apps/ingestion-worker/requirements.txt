@@ -8,3 +8,5 @@ pydantic-settings
 pytest
 pytest-asyncio
 tornado
+structlog
+colorama

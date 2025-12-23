@@ -4,13 +4,15 @@ import json
 import nsq
 import uvloop
 import tornado.platform.asyncio
+import structlog
 from config import settings
 from handlers.web import handle_web_task
 from handlers.file import handle_file_task
+from logger import configure_logger
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+configure_logger()
+logger = structlog.get_logger(__name__)
 
 # Global producer
 producer = None
@@ -37,7 +39,7 @@ async def process_message(message):
 
     try:
         data = json.loads(message.body)
-        logger.info(f"Received message: {data}")
+        logger.info("message_received", data=data)
         
         result_content = None
         source_id = data.get('id')
@@ -63,28 +65,58 @@ async def process_message(message):
                 result_payload = {
                     "source_id": source_id,
                     "content": res['content'],
-                    "url": res['url']
+                    "url": res['url'],
+                    "status": "success"
                 }
                 
                 producer.pub(
                     settings.nsq_topic_result,
                     json.dumps(result_payload).encode('utf-8'),
-                    callback=lambda c, d: logger.info(f"Published result for {source_id} - {res.get('url')}")
+                    callback=lambda c, d: logger.info("result_published", source_id=source_id, url=res.get('url'))
                 )
+        elif producer:
+            # Handle case where no results returned (e.g. all pages failed)
+            fail_payload = {
+                "source_id": source_id,
+                "status": "failed",
+                "error": "No content extracted",
+                "url": data.get('url', ''),
+                "content": ""
+            }
+            producer.pub(
+                settings.nsq_topic_result,
+                json.dumps(fail_payload).encode('utf-8'),
+                callback=lambda c, d: logger.info("failure_reported", source_id=source_id, reason="empty_results")
+            )
             
         message.finish()
         
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
-        # message.requeue() # pynsq handles requeue on timeout if not finished? 
-        # Or explicit requeue:
-        message.requeue(delay=10)
+        logger.error("message_processing_failed", error=str(e))
+        
+        # Publish failure result to backend to update status
+        if producer and 'source_id' in locals():
+            fail_payload = {
+                "source_id": source_id,
+                "status": "failed",
+                "error": str(e),
+                "url": data.get('url', ''),
+                "content": ""
+            }
+            producer.pub(
+                settings.nsq_topic_result,
+                json.dumps(fail_payload).encode('utf-8'),
+                callback=lambda c, d: logger.info("failure_reported", source_id=source_id)
+            )
+        
+        # Finish message so it doesn't loop forever
+        message.finish()
     finally:
         stop_touch.set()
         await touch_task
 
 def main():
-    logger.info("Ingestion Worker Starting...")
+    logger.info("worker_starting")
     
     # Configure uvloop
     uvloop.install()
@@ -116,7 +148,7 @@ def main():
     global producer
     producer = nsq.Writer([settings.nsqd_tcp_address])
     
-    logger.info("NSQ Reader and Writer initialized")
+    logger.info("nsq_initialized")
     
     # Run the loop
     loop.run_forever()

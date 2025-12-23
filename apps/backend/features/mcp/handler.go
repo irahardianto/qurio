@@ -286,12 +286,19 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 // HandleMessage accepts POST messages associated with a session
 func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
-	slog.Info("mcp message received", "method", r.Method, "path", r.URL.Path)
+	correlationID := uuid.New().String()
+	w.Header().Set("X-Correlation-ID", correlationID)
+	
+	slog.Info("mcp message received", 
+		"method", r.Method, 
+		"path", r.URL.Path,
+		"correlation_id", correlationID,
+	)
 
 	sessionID := r.URL.Query().Get("sessionId")
 	if sessionID == "" {
-		slog.Warn("missing sessionId in message request")
-		http.Error(w, "Missing sessionId", http.StatusBadRequest)
+		slog.Warn("missing sessionId in message request", "correlation_id", correlationID)
+		h.writeHttpError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Missing sessionId", correlationID)
 		return
 	}
 
@@ -300,15 +307,15 @@ func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	h.sessionsLock.RUnlock()
 
 	if !exists {
-		slog.Warn("session not found", "session_id", sessionID)
-		http.Error(w, "Session not found", http.StatusNotFound)
+		slog.Warn("session not found", "session_id", sessionID, "correlation_id", correlationID)
+		h.writeHttpError(w, http.StatusNotFound, "NOT_FOUND", "Session not found", correlationID)
 		return
 	}
 
 	var req JSONRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		slog.Warn("invalid json in message request", "error", err)
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		slog.Warn("invalid json in message request", "error", err, "correlation_id", correlationID)
+		h.writeHttpError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON", correlationID)
 		return
 	}
 
@@ -317,6 +324,8 @@ func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	
 	// Process asynchronously
 	go func() {
+		// Create a new context with correlation ID if we had a way to propagate it easily
+		// For now just pass background context
 		resp := h.processRequest(context.Background(), req)
 		if resp == nil {
 			// Notification, no response needed
@@ -326,7 +335,7 @@ func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 		// Serialize response
 		respBytes, err := json.Marshal(resp)
 		if err != nil {
-			slog.Error("failed to marshal response", "error", err)
+			slog.Error("failed to marshal response", "error", err, "correlation_id", correlationID)
 			return
 		}
 
@@ -334,23 +343,16 @@ func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 		h.sessionsLock.RLock()
 		defer h.sessionsLock.RUnlock()
 		
-		// Re-check existence under lock to avoid sending to closed channel
-		// Although msgChan is a local var, the channel itself might be closed by HandleSSE
-		// Wait, we can't easily check if channel is closed without a separate status or context.
-		// BUT HandleSSE removes it from map THEN closes it.
-		// So if it's in the map, it's open (mostly, race window is small but exists if we just check map).
-		// Better: HandleSSE should not close the channel directly if writers exist, or writers should recover panic.
-		// Simplest fix for now: Recover panic if channel is closed.
 		defer func() {
 			if r := recover(); r != nil {
-				slog.Warn("failed to send to sse channel (closed)", "session_id", sessionID, "error", r)
+				slog.Warn("failed to send to sse channel (closed)", "session_id", sessionID, "error", r, "correlation_id", correlationID)
 			}
 		}()
 
 		select {
 		case msgChan <- string(respBytes):
 		default:
-			slog.Warn("session channel full, dropping message", "session_id", sessionID)
+			slog.Warn("session channel full, dropping message", "session_id", sessionID, "correlation_id", correlationID)
 		}
 	}()
 }
@@ -370,6 +372,21 @@ func (h *Handler) writeError(w http.ResponseWriter, id interface{}, code int, me
 			"message": message,
 		},
 		ID: id,
+	}
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) writeHttpError(w http.ResponseWriter, status int, code string, message string, correlationID string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	resp := map[string]interface{}{
+		"status": "error",
+		"error": map[string]interface{}{
+			"code":    code,
+			"message": message,
+		},
+		"correlationId": correlationID,
 	}
 	json.NewEncoder(w).Encode(resp)
 }
