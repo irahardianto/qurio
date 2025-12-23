@@ -20,6 +20,7 @@ import (
 	"qurio/apps/backend/internal/vector"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/middleware"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -198,14 +199,14 @@ func main() {
 	}
 
 	// Routes
-	http.HandleFunc("POST /sources", enableCORS(sourceHandler.Create))
-	http.HandleFunc("GET /sources", enableCORS(sourceHandler.List))
-	http.HandleFunc("GET /sources/{id}", enableCORS(sourceHandler.Get))
-	http.HandleFunc("DELETE /sources/{id}", enableCORS(sourceHandler.Delete))
-	http.HandleFunc("POST /sources/{id}/resync", enableCORS(sourceHandler.ReSync))
+	http.Handle("POST /sources", middleware.CorrelationID(enableCORS(sourceHandler.Create)))
+	http.Handle("GET /sources", middleware.CorrelationID(enableCORS(sourceHandler.List)))
+	http.Handle("GET /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Get)))
+	http.Handle("DELETE /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Delete)))
+	http.Handle("POST /sources/{id}/resync", middleware.CorrelationID(enableCORS(sourceHandler.ReSync)))
 
-	http.HandleFunc("GET /settings", enableCORS(settingsHandler.GetSettings))
-	http.HandleFunc("PUT /settings", enableCORS(settingsHandler.UpdateSettings))
+	http.Handle("GET /settings", middleware.CorrelationID(enableCORS(settingsHandler.GetSettings)))
+	http.Handle("PUT /settings", middleware.CorrelationID(enableCORS(settingsHandler.UpdateSettings)))
 
 	// Feature: Retrieval & MCP
 	queryLogger, err := retrieval.NewFileQueryLogger("data/logs/query.log")
@@ -216,11 +217,11 @@ func main() {
 
 	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, queryLogger)
 	mcpHandler := mcp.NewHandler(retrievalService)
-	http.Handle("/mcp", mcpHandler) // Legacy POST endpoint
+	http.Handle("/mcp", middleware.CorrelationID(mcpHandler)) // Legacy POST endpoint
 	
 	// New SSE Endpoints
-	http.HandleFunc("GET /mcp/sse", enableCORS(mcpHandler.HandleSSE))
-	http.HandleFunc("POST /mcp/messages", enableCORS(mcpHandler.HandleMessage))
+	http.Handle("GET /mcp/sse", middleware.CorrelationID(enableCORS(mcpHandler.HandleSSE)))
+	http.Handle("POST /mcp/messages", middleware.CorrelationID(enableCORS(mcpHandler.HandleMessage)))
 
 	// Worker (Result Consumer)
 	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo)

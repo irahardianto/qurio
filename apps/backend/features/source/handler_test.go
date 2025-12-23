@@ -120,6 +120,11 @@ func TestCreate_FullPayload(t *testing.T) {
 	handler.Create(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NotNil(t, resp["data"])
+
 	repo.AssertExpectations(t)
 	pub.AssertExpectations(t)
 }

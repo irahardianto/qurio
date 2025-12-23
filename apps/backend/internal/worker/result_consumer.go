@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nsqio/go-nsq"
 	"qurio/apps/backend/internal/text"
@@ -67,22 +68,31 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	// 3. Embed & Store
 	for i, c := range chunks {
-		vector, err := h.embedder.Embed(ctx, c)
-		if err != nil {
-			slog.Error("embed failed", "error", err)
-			return err
-		}
+		err := func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
 
-		chunk := Chunk{
-			Content:    c,
-			Vector:     vector,
-			SourceID:   payload.SourceID,
-			SourceURL:  payload.URL,
-			ChunkIndex: i,
-		}
-		
-		if err := h.store.StoreChunk(ctx, chunk); err != nil {
-			slog.Error("store failed", "error", err)
+			vector, err := h.embedder.Embed(ctx, c)
+			if err != nil {
+				slog.Error("embed failed", "error", err)
+				return err
+			}
+
+			chunk := Chunk{
+				Content:    c,
+				Vector:     vector,
+				SourceID:   payload.SourceID,
+				SourceURL:  payload.URL,
+				ChunkIndex: i,
+			}
+
+			if err := h.store.StoreChunk(ctx, chunk); err != nil {
+				slog.Error("store failed", "error", err)
+				return err
+			}
+			return nil
+		}()
+		if err != nil {
 			return err
 		}
 	}

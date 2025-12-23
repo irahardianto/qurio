@@ -8,7 +8,7 @@
     - **Part 3.5: Technical Compliance** (Logging/Errors/Timeouts)
     - **Stabilization:** Recursive crawling fixes, Status lifecycle improvements, Docker config cleanup.
 - **In Progress:**
-    - Planning for User Auth & Observability.
+    - **Part 3.6: Document Upload & OCR Integration** (Planned).
 - **Next:**
-    - Query Observability (Deep Dive).
     - User Authentication (Auth0/OIDC).
+    - Query Observability (Deep Dive).

@@ -1,11 +1,11 @@
 package settings
 
 import (
+	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
+	"qurio/apps/backend/internal/middleware"
 )
 
 type Handler struct {
@@ -17,32 +17,28 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
-	slog.Info("request received", "method", r.Method, "path", r.URL.Path)
 	s, err := h.svc.Get(r.Context())
 	if err != nil {
-		h.writeError(w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
-	slog.Info("request completed", "method", r.Method, "path", r.URL.Path, "status", http.StatusOK)
-	json.NewEncoder(w).Encode(s)
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": s})
 }
 
 func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
-	slog.Info("request received", "method", r.Method, "path", r.URL.Path)
 	var s Settings
 	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
-		h.writeError(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
+		h.writeError(r.Context(), w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := h.svc.Update(r.Context(), &s); err != nil {
-		h.writeError(w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
-	slog.Info("request completed", "method", r.Method, "path", r.URL.Path, "status", http.StatusOK)
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, code, message string, status int) {
+func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
@@ -51,7 +47,7 @@ func (h *Handler) writeError(w http.ResponseWriter, code, message string, status
 			"code":    code,
 			"message": message,
 		},
-		"correlationId": uuid.New().String(),
+		"correlationId": middleware.GetCorrelationID(ctx),
 	}
 
 	json.NewEncoder(w).Encode(resp)

@@ -67,7 +67,10 @@ async def test_handle_file_task_success():
         # But we need to make sure it doesn't actually try to read a file.
         
         result = await handle_file_task("/tmp/test.pdf")
-        assert result == "# File Content"
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["content"] == "# File Content"
+        assert result[0]["url"] == "/tmp/test.pdf"
         # Verify convert was called (eventually)
         # Note: Since it runs in a thread, verifying call args might be tricky if not waited properly, 
         # but await handle_file_task waits for it.

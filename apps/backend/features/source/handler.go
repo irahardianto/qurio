@@ -1,11 +1,12 @@
 package source
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
+	"qurio/apps/backend/internal/middleware"
 )
 
 type Handler struct {
@@ -23,7 +24,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Exclusions []string `json:"exclusions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
+		h.writeError(r.Context(), w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -34,23 +35,23 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.service.Create(r.Context(), src); err != nil {
 		if err.Error() == "Duplicate detected" {
-			h.writeError(w, "CONFLICT", err.Error(), http.StatusConflict)
+			h.writeError(r.Context(), w, "CONFLICT", err.Error(), http.StatusConflict)
 			return
 		}
 		// Log the actual error for debugging
 		slog.Error("operation failed", "error", err, "url", req.URL)
-		h.writeError(w, "INTERNAL_ERROR", "Internal Server Error", http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(src)
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": src})
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	sources, err := h.service.List(r.Context())
 	if err != nil {
-		h.writeError(w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -60,13 +61,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(sources)
+	resp := map[string]interface{}{
+		"data": sources,
+		"meta": map[string]int{"count": len(sources)},
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		h.writeError(w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -75,7 +80,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ReSync(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.service.ReSync(r.Context(), id); err != nil {
-		h.writeError(w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -85,14 +90,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	detail, err := h.service.Get(r.Context(), id)
 	if err != nil {
-		h.writeError(w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(detail)
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": detail})
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, code, message string, status int) {
+func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
@@ -101,7 +106,7 @@ func (h *Handler) writeError(w http.ResponseWriter, code, message string, status
 			"code":    code,
 			"message": message,
 		},
-		"correlationId": uuid.New().String(),
+		"correlationId": middleware.GetCorrelationID(ctx),
 	}
 
 	json.NewEncoder(w).Encode(resp)

@@ -4,6 +4,7 @@ import { useSourceStore } from './source.store'
 import { Plus, Loader2, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 
 const store = useSourceStore()
 const url = ref('')
@@ -81,11 +82,10 @@ async function submit() {
         
         <div class="grid w-full gap-1.5">
            <label class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Exclusions (Regex per line)</label>
-           <textarea 
+           <Textarea 
              v-model="exclusions" 
-             class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
              placeholder="/login&#10;/private"
-           ></textarea>
+           />
         </div>
       </div>
     </div>

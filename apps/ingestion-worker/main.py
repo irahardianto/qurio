@@ -56,9 +56,7 @@ async def process_message(message):
         
         elif task_type == 'file':
             file_path = data.get('path')
-            content = await handle_file_task(file_path)
-            # Use path as URL for files
-            results_list = [{"url": file_path, "content": content}]
+            results_list = await handle_file_task(file_path)
             
         if results_list and producer:
             for res in results_list:

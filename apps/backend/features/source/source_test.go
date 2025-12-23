@@ -173,6 +173,7 @@ func TestReSyncSource(t *testing.T) {
 	src := &source.Source{ID: id, URL: "http://example.com"}
 
 	repo.On("Get", mock.Anything, id).Return(src, nil)
+	repo.On("UpdateStatus", mock.Anything, id, "in_progress").Return(nil)
 	settingsMock.On("Get", mock.Anything).Return(&settings.Settings{GeminiAPIKey: "test-key"}, nil)
 	
 	pub.On("Publish", "ingest.task", mock.MatchedBy(func(body []byte) bool {

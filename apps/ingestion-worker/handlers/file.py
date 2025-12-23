@@ -9,7 +9,7 @@ logger = structlog.get_logger(__name__)
 converter = DocumentConverter()
 executor = ThreadPoolExecutor(max_workers=2)
 
-async def handle_file_task(file_path: str) -> str:
+async def handle_file_task(file_path: str) -> list[dict]:
     """
     Converts a document to markdown using Docling.
     Executes blocking code in a thread pool.
@@ -29,7 +29,8 @@ async def handle_file_task(file_path: str) -> str:
             timeout=60.0
         )
         
-        return result.document.export_to_markdown()
+        content = result.document.export_to_markdown()
+        return [{"url": file_path, "content": content}]
 
     except asyncio.TimeoutError:
         logger.error("conversion_timeout", path=file_path)

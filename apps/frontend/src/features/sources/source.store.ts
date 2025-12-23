@@ -25,7 +25,8 @@ export const useSourceStore = defineStore('sources', () => {
       if (!res.ok) {
         throw new Error(`Failed to fetch sources: ${res.statusText}`)
       }
-      sources.value = await res.json()
+      const json = await res.json()
+      sources.value = json.data || []
     } catch (e: any) {
       error.value = e.message || 'Unknown error'
       console.error('Failed to fetch sources', e)
@@ -67,8 +68,8 @@ export const useSourceStore = defineStore('sources', () => {
       if (!res.ok) {
         throw new Error(`Failed to add source: ${res.statusText}`)
       }
-      const newSource = await res.json()
-      sources.value.push(newSource)
+      const json = await res.json()
+      sources.value.push(json.data)
     } catch (e: any) {
       error.value = e.message || 'Unknown error'
       console.error('Failed to add source', e)
@@ -110,7 +111,8 @@ export const useSourceStore = defineStore('sources', () => {
     try {
       const res = await fetch(`/api/sources/${id}`)
       if (!res.ok) throw new Error(`Failed to fetch source details: ${res.statusText}`)
-      return await res.json()
+      const json = await res.json()
+      return json.data
     } catch (e: any) {
       error.value = e.message || 'Unknown error'
       return null

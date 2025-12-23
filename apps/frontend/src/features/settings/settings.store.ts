@@ -15,7 +15,8 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       const res = await fetch('/api/settings')
       if (!res.ok) throw new Error('Failed to fetch settings')
-      const data = await res.json()
+      const json = await res.json()
+      const data = json.data || {}
       rerankProvider.value = data.rerank_provider || 'none'
       rerankApiKey.value = data.rerank_api_key || ''
       geminiApiKey.value = data.gemini_api_key || ''
