@@ -59,7 +59,7 @@ services:
       - NSQ_LOOKUPD_HTTP=nsqlookupd:4161
       - NSQD_TCP_ADDRESS=nsqd:4150
     volumes:
-      - /tmp/qurio-uploads:/tmp/qurio-uploads
+      - qurio_uploads:/var/lib/qurio/uploads
   
   backend:
     build: ./apps/backend
@@ -78,9 +78,13 @@ services:
       nsqd:
         condition: service_healthy
     volumes:
-      - /tmp/qurio-uploads:/tmp/qurio-uploads
+      - qurio_uploads:/var/lib/qurio/uploads
 
   frontend:
     build: ./apps/frontend
     ports: ["3000:80"]
     depends_on: [backend]
+
+volumes:
+  qurio_uploads:
+    name: qurio_uploads

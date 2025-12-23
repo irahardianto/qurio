@@ -4,6 +4,7 @@ import { ref } from 'vue'
 export interface Source {
   id: string
   name: string
+  type?: string
   url?: string
   status?: string
   lastSyncedAt?: string
@@ -105,6 +106,33 @@ export const useSourceStore = defineStore('sources', () => {
     }
   }
 
+  async function uploadSource(file: File) {
+    isLoading.value = true
+    error.value = null
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/sources/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || `Failed to upload source: ${res.statusText}`)
+      }
+      const json = await res.json()
+      sources.value.push(json.data)
+      return json.data
+    } catch (e: any) {
+      error.value = e.message || 'Unknown error'
+      console.error('Failed to upload source', e)
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function getSource(id: string) {
     isLoading.value = true
     error.value = null
@@ -129,6 +157,7 @@ export const useSourceStore = defineStore('sources', () => {
     addSource,
     deleteSource,
     resyncSource,
+    uploadSource,
     getSource,
     startPolling,
     stopPolling

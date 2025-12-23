@@ -2,9 +2,16 @@ package source
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+
+	"github.com/google/uuid"
 
 	"qurio/apps/backend/internal/middleware"
 )
@@ -19,6 +26,7 @@ func NewHandler(service *Service) *Handler {
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		Type       string   `json:"type"`
 		URL        string   `json:"url"`
 		MaxDepth   int      `json:"max_depth"`
 		Exclusions []string `json:"exclusions"`
@@ -29,6 +37,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	src := &Source{
+		Type:       req.Type,
 		URL:        req.URL,
 		MaxDepth:   req.MaxDepth,
 		Exclusions: req.Exclusions,
@@ -41,6 +50,68 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		// Log the actual error for debugging
 		slog.Error("operation failed", "error", err, "url", req.URL)
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": src})
+}
+
+func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
+	// 50 MB limit
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		h.writeError(r.Context(), w, "BAD_REQUEST", "File too large", http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		h.writeError(r.Context(), w, "BAD_REQUEST", "Unable to retrieve file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Create uploads directory if not exists
+	uploadDir := "/var/lib/qurio/uploads"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to create upload directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate filename
+	filename := fmt.Sprintf("%s_%s", uuid.New().String(), filepath.Base(header.Filename))
+	path := filepath.Join(uploadDir, filename)
+
+	// Create file
+	dst, err := os.Create(path)
+	if err != nil {
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to save file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	// Calculate hash while copying
+	hash := sha256.New()
+	mw := io.MultiWriter(dst, hash)
+
+	if _, err := io.Copy(mw, file); err != nil {
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to write file", http.StatusInternalServerError)
+		return
+	}
+
+	fileHash := fmt.Sprintf("%x", hash.Sum(nil))
+
+	// Call Service
+	src, err := h.service.Upload(r.Context(), path, fileHash)
+	if err != nil {
+		// Clean up file if duplicate or error
+		os.Remove(path)
+
+		if err.Error() == "Duplicate detected" {
+			h.writeError(r.Context(), w, "CONFLICT", err.Error(), http.StatusConflict)
+			return
+		}
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
 

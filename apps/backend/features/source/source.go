@@ -13,6 +13,7 @@ import (
 
 type Source struct {
 	ID          string   `json:"id"`
+	Type        string   `json:"type"`
 	URL         string   `json:"url"`
 	ContentHash string   `json:"-"`
 	BodyHash    string   `json:"-"`
@@ -59,6 +60,11 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 	hash := sha256.Sum256([]byte(src.URL))
 	src.ContentHash = fmt.Sprintf("%x", hash)
 
+	// Default to web if empty
+	if src.Type == "" {
+		src.Type = "web"
+	}
+
 	// 1. Check Duplicate
 	exists, err := s.repo.ExistsByHash(ctx, src.ContentHash)
 	if err != nil {
@@ -83,7 +89,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 
 	// 4. Publish to NSQ
 	payload, _ := json.Marshal(map[string]interface{}{
-		"type":           "web",
+		"type":           src.Type,
 		"url":            src.URL,
 		"id":             src.ID,
 		"max_depth":      src.MaxDepth,
@@ -97,6 +103,42 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 	}
 	
 	return nil
+}
+
+func (s *Service) Upload(ctx context.Context, path string, hash string) (*Source, error) {
+	// Check Duplicate
+	exists, err := s.repo.ExistsByHash(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, fmt.Errorf("Duplicate detected")
+	}
+
+	src := &Source{
+		Type:        "file",
+		URL:         path, // Use URL field to store file path
+		ContentHash: hash,
+		Status:      "in_progress",
+	}
+
+	if err := s.repo.Save(ctx, src); err != nil {
+		return nil, err
+	}
+
+	// Publish to NSQ
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type": "file",
+		"path": path,
+		"id":   src.ID,
+	})
+	if err := s.pub.Publish("ingest.task", payload); err != nil {
+		slog.Error("failed to publish ingest.task event (upload)", "error", err)
+	} else {
+		slog.Info("published ingest.task event (upload)", "path", path, "id", src.ID)
+	}
+
+	return src, nil
 }
 
 type SourceDetail struct {
@@ -150,7 +192,7 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 	}
 
 	payload, _ := json.Marshal(map[string]interface{}{
-		"type":           "web",
+		"type":           src.Type,
 		"url":            src.URL,
 		"id":             src.ID,
 		"resync":         true,

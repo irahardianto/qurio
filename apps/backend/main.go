@@ -200,6 +200,7 @@ func main() {
 
 	// Routes
 	http.Handle("POST /sources", middleware.CorrelationID(enableCORS(sourceHandler.Create)))
+	http.Handle("POST /sources/upload", middleware.CorrelationID(enableCORS(sourceHandler.Upload)))
 	http.Handle("GET /sources", middleware.CorrelationID(enableCORS(sourceHandler.List)))
 	http.Handle("GET /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Get)))
 	http.Handle("DELETE /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Delete)))

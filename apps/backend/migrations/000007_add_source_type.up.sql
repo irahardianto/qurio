@@ -1,0 +1,1 @@
+ALTER TABLE sources ADD COLUMN type TEXT NOT NULL DEFAULT 'web';

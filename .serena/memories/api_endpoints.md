@@ -2,6 +2,27 @@
 
 Base URL: `/api` (Proxied via Nginx to Backend :8081)
 
+## Response Format
+All success responses follow this envelope:
+```json
+{
+  "data": { ... }, // Object or Array
+  "meta": { ... }  // Optional metadata (e.g. { "count": 10 })
+}
+```
+
+All error responses follow this envelope:
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "...",
+    "message": "..."
+  },
+  "correlationId": "..."
+}
+```
+
 ## Sources
 | Method | Endpoint | Description | Payload/Params |
 | :--- | :--- | :--- | :--- |
