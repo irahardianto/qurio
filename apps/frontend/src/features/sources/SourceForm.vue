@@ -47,8 +47,9 @@ async function submit() {
       emit('submit')
     }
   } else {
+    // Force non-null assertion safely because we check it right after
     const selectedFile = file.value
-    if (selectedFile instanceof File) {
+    if (selectedFile && selectedFile instanceof File) {
       await store.uploadSource(selectedFile)
       if (!store.error) {
         file.value = null
