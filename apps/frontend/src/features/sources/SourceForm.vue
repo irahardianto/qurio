@@ -48,11 +48,12 @@ async function submit() {
     }
   } else {
     const selectedFile = file.value
-    if (!selectedFile) return
-    await store.uploadSource(selectedFile)
-    if (!store.error) {
-      file.value = null
-      emit('submit')
+    if (selectedFile instanceof File) {
+      await store.uploadSource(selectedFile)
+      if (!store.error) {
+        file.value = null
+        emit('submit')
+      }
     }
   }
 }
