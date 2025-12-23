@@ -34,7 +34,7 @@ onMounted(async () => {
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Source Details</h1>
         <p class="text-muted-foreground" v-if="source">
-          {{ source.type === 'file' && source.url ? source.url.split('/').pop().split('_').slice(1).join('_') : source.url }}
+          {{ source.type === 'file' && source.url ? (source.url.split('/').pop() ?? '').split('_').slice(1).join('_') : source.url }}
         </p>
       </div>
     </div>
@@ -99,7 +99,7 @@ onMounted(async () => {
                          {{ chunk.SourceURL }}
                       </a>
                       <span v-else class="text-xs font-medium text-muted-foreground truncate max-w-[300px]">
-                         {{ chunk.SourceURL.split('/').pop().split('_').slice(1).join('_') }}
+                         {{ (chunk.SourceURL.split('/').pop() ?? '').split('_').slice(1).join('_') }}
                       </span>
                    </div>
                    <Badge variant="outline" class="text-[10px] font-mono">Index: {{ chunk.ChunkIndex }}</Badge>

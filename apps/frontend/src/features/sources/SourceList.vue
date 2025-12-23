@@ -49,7 +49,7 @@ onUnmounted(() => {
       <Card v-for="source in store.sources" :key="source.id" class="bg-card">
         <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle class="text-sm font-medium truncate pr-4 flex-1" :title="source.url">
-             {{ source.type === 'file' && source.url ? source.url.split('/').pop().split('_').slice(1).join('_') : source.url }}
+             {{ source.type === 'file' && source.url ? (source.url.split('/').pop() ?? '').split('_').slice(1).join('_') : source.url }}
           </CardTitle>
           <a v-if="source.type !== 'file'" :href="source.url" target="_blank" class="text-muted-foreground hover:text-primary transition-colors">
              <ExternalLink :size="14" />

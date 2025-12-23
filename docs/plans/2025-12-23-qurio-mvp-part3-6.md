@@ -2,7 +2,13 @@
 
 **Ref:** `2025-12-23-qurio-mvp-part3-6`
 **Feature:** Document Ingestion (Upload, Storage, Worker Processing)
-**Status:** Planned
+**Status:** Completed
+
+## Notes
+- **Infrastructure:** Implemented named volume `qurio_uploads`.
+- **Backend:** Added `type` column, `Upload` endpoint, and fixed `ReSync` to handle file paths.
+- **Frontend:** Added File Upload UI and updated Source Lists to show filenames/icons.
+- **Verification:** Verified compilation and code logic via `codebase_investigator`.
 
 ## 1. Scope
 Implement the end-to-end flow for uploading documents (PDF, Markdown, etc.), storing them in a shared volume, and processing them via the Ingestion Worker using Docling. This addresses the missing "File Upload" requirement from the MVP scope.

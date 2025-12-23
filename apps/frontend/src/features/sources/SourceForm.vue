@@ -48,7 +48,7 @@ async function submit() {
     }
   } else {
     if (!file.value) return
-    await store.uploadSource(file.value)
+    await store.uploadSource(file.value as File)
     if (!store.error) {
       file.value = null
       emit('submit')
