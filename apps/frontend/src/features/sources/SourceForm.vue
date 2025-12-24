@@ -49,7 +49,8 @@ async function submit() {
   } else {
     if (file.value) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await store.uploadSource(file.value as any)
+      const filePayload = file.value as any
+      await store.uploadSource(filePayload)
       if (!store.error) {
         file.value = null
         emit('submit')
