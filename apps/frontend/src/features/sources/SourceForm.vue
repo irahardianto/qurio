@@ -62,7 +62,7 @@ async function submit() {
 function onFileChange(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    file.value = target.files[0]
+    file.value = target.files[0] || null
   }
 }
 </script>
