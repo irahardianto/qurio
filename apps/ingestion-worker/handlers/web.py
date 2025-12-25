@@ -1,7 +1,15 @@
 import asyncio
 import structlog
 import json
+import httpx
+import re
+from urllib.parse import urljoin, urlparse
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, LLMConfig
+try:
+    from crawl4ai import AsyncUrlSeeder, SeedingConfig
+    HAS_SEEDER = True
+except ImportError:
+    HAS_SEEDER = False
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.content_filter_strategy import PruningContentFilter, LLMContentFilter
 from crawl4ai.deep_crawling.filters import URLPatternFilter, FilterChain
@@ -35,11 +43,56 @@ INSTRUCTION = """
     - Numbered lists for sequential steps
 """
 
+async def discover_urls(url: str) -> list[str]:
+    """
+    Discovers URLs from llms.txt and sitemap.xml.
+    """
+    urls = []
+    parsed_url = urlparse(url)
+    root_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    
+    # 1. Check llms.txt at root
+    llms_url = urljoin(root_url, "/llms.txt")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(llms_url)
+            if resp.status_code == 200:
+                logger.info("llms_txt_found", url=llms_url)
+                # Parse markdown links: [text](link)
+                links = re.findall(r'\[.*?\]\((.*?)\)', resp.text)
+                for link in links:
+                    full_url = urljoin(llms_url, link)
+                    # Only include links from same domain
+                    if urlparse(full_url).netloc == parsed_url.netloc:
+                        urls.append(full_url)
+    except Exception as e:
+        logger.debug("llms_txt_not_found", url=llms_url, error=str(e))
+
+    # 2. Check Sitemap
+    if HAS_SEEDER:
+        try:
+            async with AsyncUrlSeeder() as seeder:
+                # Try default sitemap
+                config = SeedingConfig(source="sitemap")
+                sitemap_urls = await seeder.urls(url, config)
+                urls.extend([u['url'] for u in sitemap_urls])
+        except Exception as e:
+            logger.debug("sitemap_discovery_failed", url=url, error=str(e))
+            
+    return list(set(urls)) # Deduplicate
+
 async def handle_web_task(url: str, max_depth: int = 0, exclusions: list[str] = None, api_key: str = None) -> list[dict]:
     """
     Crawls a website recursively and returns a list of dictionaries containing url and content.
     """
     logger.info("crawl_starting", url=url, depth=max_depth)
+    
+    # Discovery (Sitemap/llms.txt)
+    seed_urls = []
+    if max_depth > 0:
+        seed_urls = await discover_urls(url)
+        if seed_urls:
+            logger.info("discovered_urls", count=len(seed_urls))
     
     if exclusions is None:
         exclusions = []
@@ -101,11 +154,21 @@ async def handle_web_task(url: str, max_depth: int = 0, exclusions: list[str] = 
                 # Calculate timeout based on depth: 60s + 60s per depth level
                 recursive_timeout = 60.0 + (max_depth * 60.0)
                 
-                # Use arun() instead of arun_many() for deep crawl, returns list of results
-                run_results = await asyncio.wait_for(
-                    crawler.arun(url=url, config=config),
-                    timeout=recursive_timeout
-                )
+                if seed_urls:
+                    # If we have seed URLs, we crawl them in batch.
+                    # This is more efficient than discovery-based deep crawl if we already have the list.
+                    urls_to_crawl = list(set([url] + seed_urls))
+                    logger.info("batch_crawling_seeds", count=len(urls_to_crawl))
+                    run_results = await asyncio.wait_for(
+                        crawler.arun_many(urls=urls_to_crawl, config=config),
+                        timeout=recursive_timeout * 2 # Increase timeout for batch
+                    )
+                else:
+                    # Traditional deep crawl starting from single URL
+                    run_results = await asyncio.wait_for(
+                        crawler.arun(url=url, config=config),
+                        timeout=recursive_timeout
+                    )
                 
                 # Verify we got a list
                 if not isinstance(run_results, list):

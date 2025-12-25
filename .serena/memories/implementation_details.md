@@ -17,10 +17,12 @@
 
 ## Ingestion Architecture
 - **Worker (Python):** Handles crawling (`crawl4ai`) and file conversion (`docling`).
+    - **Advanced Ingestion:** Supports `sitemap.xml` and `llms.txt` discovery to prioritize and seed URLs.
     - Consumes: `ingest.task` (NSQ)
     - Produces: `ingest.result` (NSQ) -> Backend
 - **Backend (Go):**
     - Consumes: `ingest.result`
+    - **Idempotency:** Calls `DeleteChunksByURL` before storing new chunks for a given source + URL to prevent duplicates during re-sync.
     - Actions: Chunking -> Embedding (Gemini) -> Storage (Weaviate).
 
 ## Frontend Architecture

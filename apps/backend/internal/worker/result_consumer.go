@@ -51,6 +51,14 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	slog.Info("received result", "source_id", payload.SourceID, "content_len", len(payload.Content))
 
+	// 0. Delete Old Chunks (Idempotency)
+	if payload.URL != "" {
+		if err := h.store.DeleteChunksByURL(ctx, payload.SourceID, payload.URL); err != nil {
+			slog.Error("failed to delete old chunks", "error", err, "source_id", payload.SourceID, "url", payload.URL)
+			return err // Retry on error to ensure consistency
+		}
+	}
+
 	// 1. Update Hash
 	hash := sha256.Sum256([]byte(payload.Content))
 	hashStr := fmt.Sprintf("%x", hash)

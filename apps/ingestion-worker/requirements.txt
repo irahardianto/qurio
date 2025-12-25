@@ -10,3 +10,4 @@ pytest-asyncio
 tornado
 structlog
 colorama
+httpx

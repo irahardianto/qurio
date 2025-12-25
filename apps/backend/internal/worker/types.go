@@ -18,6 +18,7 @@ type Embedder interface {
 
 type VectorStore interface {
 	StoreChunk(ctx context.Context, chunk Chunk) error
+	DeleteChunksByURL(ctx context.Context, sourceID, url string) error
 }
 
 type SourceStatusUpdater interface {

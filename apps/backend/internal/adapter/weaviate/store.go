@@ -32,6 +32,26 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 	return err
 }
 
+func (s *Store) DeleteChunksByURL(ctx context.Context, sourceID, url string) error {
+	_, err := s.client.Batch().ObjectsBatchDeleter().
+		WithClassName("DocumentChunk").
+		WithOutput("minimal").
+		WithWhere(filters.Where().
+			WithOperator(filters.And).
+			WithOperands([]*filters.WhereBuilder{
+				filters.Where().
+					WithPath([]string{"sourceId"}).
+					WithOperator(filters.Equal).
+					WithValueString(sourceID),
+				filters.Where().
+					WithPath([]string{"url"}).
+					WithOperator(filters.Equal).
+					WithValueString(url),
+			})).
+		Do(ctx)
+	return err
+}
+
 func (s *Store) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int) ([]retrieval.SearchResult, error) {
 	hybrid := s.client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
