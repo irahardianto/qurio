@@ -5,6 +5,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const rerankProvider = ref('none')
   const rerankApiKey = ref('')
   const geminiApiKey = ref('')
+  const searchAlpha = ref(0.5)
+  const searchTopK = ref(20)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const successMessage = ref<string | null>(null)
@@ -20,6 +22,8 @@ export const useSettingsStore = defineStore('settings', () => {
       rerankProvider.value = data.rerank_provider || 'none'
       rerankApiKey.value = data.rerank_api_key || ''
       geminiApiKey.value = data.gemini_api_key || ''
+      searchAlpha.value = data.search_alpha ?? 0.5
+      searchTopK.value = data.search_top_k ?? 20
     } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message
     } finally {
@@ -39,6 +43,8 @@ export const useSettingsStore = defineStore('settings', () => {
           rerank_provider: rerankProvider.value,
           rerank_api_key: rerankApiKey.value,
           gemini_api_key: geminiApiKey.value,
+          search_alpha: searchAlpha.value,
+          search_top_k: searchTopK.value,
         }),
       })
       if (!res.ok) throw new Error('Failed to update settings')
@@ -55,6 +61,8 @@ export const useSettingsStore = defineStore('settings', () => {
     rerankProvider,
     rerankApiKey,
     geminiApiKey,
+    searchAlpha,
+    searchTopK,
     isLoading,
     error,
     successMessage,

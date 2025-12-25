@@ -32,7 +32,7 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 	return err
 }
 
-func (s *Store) Search(ctx context.Context, query string, vector []float32, alpha float32) ([]retrieval.SearchResult, error) {
+func (s *Store) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int) ([]retrieval.SearchResult, error) {
 	hybrid := s.client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
 		WithVector(vector).
@@ -49,7 +49,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 	res, err := s.client.GraphQL().Get().
 		WithClassName("DocumentChunk").
 		WithHybrid(hybrid).
-		WithLimit(5).
+		WithLimit(limit).
 		WithFields(fields...).
 		Do(ctx)
 	if err != nil {

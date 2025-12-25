@@ -216,7 +216,7 @@ func main() {
 		queryLogger = retrieval.NewQueryLogger(os.Stdout)
 	}
 
-	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, queryLogger)
+	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, settingsService, queryLogger)
 	mcpHandler := mcp.NewHandler(retrievalService)
 	http.Handle("/mcp", middleware.CorrelationID(mcpHandler)) // Legacy POST endpoint
 	

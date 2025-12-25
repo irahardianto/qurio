@@ -1,17 +1,21 @@
-**Status:** MVP Refactoring Phase - Document Ingestion & Reliability Complete.
-- **Completed:**
-    - Core Architecture (Go/Weaviate/Postgres/Vue)
-    - Source CRUD & Settings
-    - Retrieval (MCP)
-    - Distributed Ingestion (Basic)
-    - **Backend & Worker Crawler Integration** (Recursive/Exclusions, Dynamic Config, Gemini 3)
-    - **Part 3.5: Technical Compliance** (Logging/Errors/Timeouts)
-    - **Part 3.6: Document Upload & OCR Integration** (PDF/Markdown support via Docling)
-    - **Part 3.7: Reliability & Standardization** (Correlation IDs, API Envelopes, Worker Timeouts)
-    - **E2E Testing Infrastructure:** Playwright setup in `apps/e2e` with Docker integration.
-    - **Stabilization:** Frontend build fixes (TS/ESLint), Backend imports, Status polling.
-- **In Progress:**
-    - **Authentication:** User Auth (Auth0/OIDC) - *Next Priority*
-- **Next:**
-    - Query Observability (Deep Dive).
-    - Advanced RAG (HyDE, Multi-Query).
+# Project Overview
+
+Qurio is a self-hosted, open-source ingestion and retrieval engine designed to provide grounded context for AI agents.
+
+## Core Features
+- **Ingestion:** Supports web crawling (with Sitemap/llms.txt support) and file uploads (PDF/DOCX via Docling).
+- **Retrieval:** Hybrid search (Weaviate) with configurable Reranking (Jina/Cohere).
+- **Interface:** MCP Protocol for agents, Admin UI for management.
+- **Architecture:** Go Backend, Vue Frontend, Python Worker, PostgreSQL + Weaviate.
+
+## Current Status
+- **Date:** 2025-12-25
+- **Completed:** 
+  - Deployment (Docker)
+  - Core Ingestion (Web/File) & Retrieval (MCP)
+  - Settings (Alpha/TopK)
+  - Bug Fixes & Standardization (Correlation IDs, API Envelopes)
+- **In Progress:** 
+  - Part 4.2: Advanced Ingestion (Sitemap/llms.txt), Re-sync Integrity, Cohere Reranker.
+- **Next:** 
+  - UI Polish, Final E2E Suite, Documentation.

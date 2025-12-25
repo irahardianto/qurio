@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useSettingsStore } from './settings.store'
-import { Save, Loader2 } from 'lucide-vue-next'
+import { Save, Loader2, HelpCircle } from 'lucide-vue-next'
 
 const store = useSettingsStore()
 
@@ -37,6 +37,39 @@ onMounted(() => {
       <p class="hint">
         Required for generating embeddings (Google AI Studio).
       </p>
+    </div>
+
+    <div class="form-group">
+      <div class="label-row">
+        <label for="searchAlpha">Search Balance: {{ store.searchAlpha }}</label>
+        <HelpCircle :size="14" class="help-icon" title="Adjusts importance of Keyword vs Vector search. 0.0=Keyword, 1.0=Conceptual" />
+      </div>
+      <input 
+        id="searchAlpha" 
+        v-model.number="store.searchAlpha" 
+        type="range" 
+        min="0" 
+        max="1" 
+        step="0.1"
+        class="input-range" 
+      >
+      <div class="range-labels">
+        <span>Exact (0.0)</span>
+        <span>Conceptual (1.0)</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <div class="label-row">
+        <label for="searchTopK">Max Results</label>
+        <HelpCircle :size="14" class="help-icon" title="Maximum number of document chunks to retrieve per search. Recommended: 10-20." />
+      </div>
+      <input 
+        id="searchTopK" 
+        v-model.number="store.searchTopK" 
+        type="number" 
+        class="input" 
+      >
     </div>
 
     <div class="form-group">
@@ -108,6 +141,28 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.help-icon {
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
+.input-range {
+  width: 100%;
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
 label {

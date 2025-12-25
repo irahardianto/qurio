@@ -3,6 +3,7 @@ package retrieval
 import (
 	"context"
 	"time"
+	"qurio/apps/backend/internal/settings"
 )
 
 type SearchResult struct {
@@ -11,12 +12,17 @@ type SearchResult struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
+type SearchOptions struct {
+	Alpha *float32
+	Limit *int
+}
+
 type Embedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 }
 
 type VectorStore interface {
-	Search(ctx context.Context, query string, vector []float32, alpha float32) ([]SearchResult, error)
+	Search(ctx context.Context, query string, vector []float32, alpha float32, limit int) ([]SearchResult, error)
 }
 
 type Reranker interface {
@@ -27,14 +33,15 @@ type Service struct {
 	embedder Embedder
 	store    VectorStore
 	reranker Reranker
+	settings *settings.Service
 	logger   *QueryLogger
 }
 
-func NewService(e Embedder, s VectorStore, r Reranker, l *QueryLogger) *Service {
-	return &Service{embedder: e, store: s, reranker: r, logger: l}
+func NewService(e Embedder, s VectorStore, r Reranker, set *settings.Service, l *QueryLogger) *Service {
+	return &Service{embedder: e, store: s, reranker: r, settings: set, logger: l}
 }
 
-func (s *Service) Search(ctx context.Context, query string) ([]SearchResult, error) {
+func (s *Service) Search(ctx context.Context, query string, opts *SearchOptions) ([]SearchResult, error) {
 	start := time.Now()
 	var finalDocs []SearchResult
 	var err error
@@ -49,6 +56,24 @@ func (s *Service) Search(ctx context.Context, query string) ([]SearchResult, err
 		}
 	}()
 
+	// Get settings for defaults
+	cfg, err := s.settings.Get(ctx)
+	if err != nil {
+		// Fallback defaults if settings fail (shouldn't happen)
+		cfg = &settings.Settings{SearchAlpha: 0.5, SearchTopK: 10}
+	}
+
+	// Resolve params
+	alpha := cfg.SearchAlpha
+	if opts != nil && opts.Alpha != nil {
+		alpha = *opts.Alpha
+	}
+
+	limit := cfg.SearchTopK
+	if opts != nil && opts.Limit != nil {
+		limit = *opts.Limit
+	}
+
 	// 1. Embed Query
 	vec, err := s.embedder.Embed(ctx, query)
 	if err != nil {
@@ -56,8 +81,7 @@ func (s *Service) Search(ctx context.Context, query string) ([]SearchResult, err
 	}
 
 	// 2. Hybrid Search (BM25 + Vector)
-	// Default alpha = 0.5
-	docs, err := s.store.Search(ctx, query, vec, 0.5)
+	docs, err := s.store.Search(ctx, query, vec, alpha, limit)
 	if err != nil {
 		return nil, err
 	}

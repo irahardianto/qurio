@@ -11,9 +11,10 @@
 - **Python (Worker):** `python main.py` (or `python -m worker`)
 
 ## Verification
-- **Health Check:** `curl http://localhost:8080/health`
-- **MCP Endpoint:** `http://localhost:8080/mcp`
+- **Health Check:** `curl http://localhost:8081/health`
+- **MCP Endpoint:** `http://localhost:8081/mcp`
 - **Admin UI:** `http://localhost:3000`
+- **E2E Tests:** `cd apps/e2e && npx playwright test`
 
 ## Utilities
 - **Linting (Go):** `golangci-lint run`

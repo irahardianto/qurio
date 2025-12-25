@@ -5,10 +5,12 @@ import (
 )
 
 type Settings struct {
-	ID             int    `json:"-"`
-	RerankProvider string `json:"rerank_provider"`
-	RerankAPIKey   string `json:"rerank_api_key"`
-	GeminiAPIKey   string `json:"gemini_api_key"`
+	ID             int     `json:"-"`
+	RerankProvider string  `json:"rerank_provider"`
+	RerankAPIKey   string  `json:"rerank_api_key"`
+	GeminiAPIKey   string  `json:"gemini_api_key"`
+	SearchAlpha    float32 `json:"search_alpha"`
+	SearchTopK     int     `json:"search_top_k"`
 }
 
 type Repository interface {

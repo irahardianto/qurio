@@ -37,7 +37,7 @@ All error responses follow this envelope:
 | Method | Endpoint | Description | Payload/Params |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/settings` | Get current config | - |
-| `PUT` | `/settings` | Update config | `{"gemini_api_key": "...", "rerank_provider": "...", "rerank_api_key": "..."}` |
+| `PUT` | `/settings` | Update config | `{"gemini_api_key": "...", "rerank_provider": "...", "rerank_api_key": "...", "search_alpha": 0.5, "search_top_k": 20}` |
 
 ## MCP (Model Context Protocol)
 | Method | Endpoint | Description |

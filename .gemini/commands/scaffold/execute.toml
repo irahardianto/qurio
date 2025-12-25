@@ -126,9 +126,11 @@ IF any fails → Refactor before proceeding
 
 9. Run specified verifications
 
-10. Call `codebase_investigator` → Confirm feature implemented
+10. Run end-to-end test use Playwright MCP Agent mode, if none existant create new test specification 
 
-11. Mark task: `completed`
+11. Call `codebase_investigator` → Confirm feature implemented
+
+12. Mark task: `completed`
 
 **After batch completion:**
 Tasks completed: [X/Y]

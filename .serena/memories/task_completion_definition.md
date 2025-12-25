@@ -1,30 +1,26 @@
 # Task Completion Definition
 
-## Project Scope
-- MVP for Qurio: RAG-based search engine with web crawling and file ingestion.
+## Done Criteria
+A task is considered done when:
+1.  **Code Implemented:** The planned code changes are applied.
+2.  **Tests Passed:**
+    -   Unit tests for new/modified logic passed.
+    -   Integration tests for DB/API interactions passed.
+    -   Relevant E2E tests (if any) passed.
+3.  **Documentation Updated:**
+    -   `README.md` updated if usage changed.
+    -   API docs updated if endpoints changed.
+    -   Architecture diagrams updated if system structure changed.
+4.  **Verification:** The `verify_infra.sh` script passes (if relevant).
+5.  **Clean Code:** No linting errors, no commented-out legacy code.
 
-## Completed Features
-- **Backend (Go):**
-  - Source Management (CRUD, Soft Delete, ReSync)
-  - Ingestion Pipeline (Producer -> NSQ)
-  - Result Consumption (NSQ -> Weaviate)
-  - Retrieval API (MCP, SSE)
-  - Settings Management
-  - **Technical Compliance:** JSON Errors, Correlation IDs, Slog.
-- **Ingestion Worker (Python):**
-  - Web Crawling (Recursive, Filters, Dynamic Config)
-  - File Conversion (`docling`)
-  - **Reliability:** Structured Logging, Explicit Timeouts, Failure Reporting.
-- **Frontend (Vue):**
-  - Settings Page
-  - Source Management (List, Add, Delete, ReSync)
+## Current Phase: MVP Polish & Verification
+We are in the final stages of the MVP.
+- **Part 1-3:** Core Features (Ingestion, Search, Worker, Reranking) - COMPLETE.
+- **Part 4:** Configuration, Verification, E2E Testing - IN PROGRESS.
 
-## Stabilization Fixes (Dec 23, 2025)
-- **Recursive Crawling:** Fixed `NoneType` error in FilterChain and `list` attribute error in results.
-- **Status Updates:** Fixed "Pending" forever by adding `in_progress` state and handling `failed` results.
-- **Timeouts:** Implemented dynamic timeout scaling for deep crawls.
-- **Config:** Resolved Docker Compose variable warnings.
-
-## Next Steps
-- **Part 4:** User Authentication & Multi-tenancy.
-- **Part 5:** Advanced Observability (Query Tracing).
+## Pending Tasks (from Part 4.1 plan)
+-   [ ] Migration: Add `search_alpha` and `search_top_k`.
+-   [ ] Backend: Update Settings and Retrieval services.
+-   [ ] Frontend: Update Settings UI.
+-   [ ] E2E: Add Search and Settings tests.

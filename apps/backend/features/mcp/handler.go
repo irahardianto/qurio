@@ -13,7 +13,7 @@ import (
 )
 
 type Retriever interface {
-	Search(ctx context.Context, query string) ([]retrieval.SearchResult, error)
+	Search(ctx context.Context, query string, opts *retrieval.SearchOptions) ([]retrieval.SearchResult, error)
 }
 
 type Handler struct {
@@ -43,7 +43,9 @@ type CallParams struct {
 }
 
 type SearchArgs struct {
-	Query string `json:"query"`
+	Query string   `json:"query"`
+	Alpha *float32 `json:"alpha,omitempty"`
+	Limit *int     `json:"limit,omitempty"`
 }
 
 type Tool struct {
@@ -115,13 +117,38 @@ func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONR
 				Tools: []Tool{
 					{
 						Name:        "search",
-						Description: "Search documentation and knowledge base",
+						Description: `Search documentation and knowledge base.
+
+ARGUMENT GUIDE:
+
+[Alpha: Hybrid Search Balance]
+- 0.0 (Keyword): Use for Error Codes ("0x8004"), IDs ("550e8400"), or unique strings.
+- 0.3 (Mostly Keyword): Use for specific function names ("handle_web_task") where exact match matters but context helps.
+- 0.5 (Hybrid - Default): Safe bet for general queries like "database configuration".
+- 1.0 (Vector): Use for conceptual "How do I..." questions (e.g. "stop server" matches "shutdown").
+
+[Limit: Result Count]
+- Default: 10
+- Recommended: 5-15 (Prevent context bloat)
+- Max: 50`,
 						InputSchema: map[string]interface{}{
 							"type": "object",
 							"properties": map[string]interface{}{
 								"query": map[string]string{
 									"type":        "string",
 									"description": "The search query",
+								},
+								"alpha": map[string]interface{}{
+									"type":        "number",
+									"description": "Hybrid search balance (0.0=Keyword, 1.0=Vector). See tool description for guide.",
+									"minimum":     0.0,
+									"maximum":     1.0,
+								},
+								"limit": map[string]interface{}{
+									"type":        "integer",
+									"description": "Max results to return (default 10).",
+									"minimum":     1,
+									"maximum":     50,
 								},
 							},
 							"required": []string{"query"},
@@ -148,7 +175,11 @@ func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONR
 				return &resp
 			}
 
-			results, err := h.retriever.Search(ctx, args.Query)
+			opts := &retrieval.SearchOptions{
+				Alpha: args.Alpha,
+				Limit: args.Limit,
+			}
+			results, err := h.retriever.Search(ctx, args.Query, opts)
 			if err != nil {
 				slog.Error("search failed", "error", err)
 				return &JSONRPCResponse{
