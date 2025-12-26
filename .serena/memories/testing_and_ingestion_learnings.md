@@ -40,3 +40,14 @@ await expect(async () => {
 ### Validation Error Visibility
 **Observation:** The "Duplicate detected" error was returned by the backend but ignored/misinterpreted as a "silent failure" in the test.
 **Rule:** Ensure backend validation errors (409 Conflict) are distinct from processing failures, and check logs for specific validation messages when tests fail mysteriously.
+
+### Distributed Systems & Reset State
+**Problem:** A "ReSync" operation merely reset the parent status to `in_progress`. However, the child tasks (pages) remained `completed` in the DB. The distributed worker's idempotency check (ON CONFLICT DO NOTHING) saw existing completed pages and refused to re-queue them, causing the system to hang immediately.
+**Learning:** In stateful distributed systems (like a crawler frontier), a "Restart" must explicit **clean the state** (delete child records) to force the logic to re-evaluate and re-queue tasks.
+
+### Worker Reliability & Timeouts
+**Problem (StreamClosedError):** The NSQ client dropped connections during long processing tasks. This happened because the message "touch" (heartbeat) interval (30s) was too close to the server's timeout threshold, especially when the event loop was busy with heavy I/O.
+**Fix:** Drastically reduce the touch interval (e.g., to 10s) to ensure heartbeats are sent reliably even under load.
+
+**Problem (Crawl Timeout):** Large single-page documentation files (like `llms-full.txt`) frequently timed out with the default 120s limit.
+**Fix:** Increase specific operation timeouts (to 300s+) for web crawling tasks to accommodate large payloads.

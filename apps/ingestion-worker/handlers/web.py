@@ -75,7 +75,7 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
             # Single page crawl
             result = await asyncio.wait_for(
                 crawler.arun(url=url, config=config),
-                timeout=120.0
+                timeout=300.0
             )
             
             if not result.success:

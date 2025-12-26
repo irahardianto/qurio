@@ -32,7 +32,7 @@ async def process_message(message):
     async def touch_loop():
         while not stop_touch.is_set():
             message.touch()
-            await asyncio.sleep(30)
+            await asyncio.sleep(10) # Touch often to prevent timeout
             
     touch_task = asyncio.create_task(touch_loop())
 

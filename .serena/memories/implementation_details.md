@@ -33,7 +33,12 @@ The ingestion system uses a distributed page-level crawl architecture.
      - Bulk inserts new `SourcePage` records (ignoring duplicates).
      - Publishes new Tasks for new pages (Depth + 1).
    - Updates Page Status to "completed".
+   - **Source Completion**: Checks if all pages are completed. If pending count is 0, marks Source as `completed`.
 6. Frontend polls `GET /sources/{id}/pages` to update the real-time progress bar and "Active Crawls" list.
+
+### Special Handling
+- **llms.txt**: The worker explicitly parses markdown links (`[text](url)`) using regex to support non-HTML link discovery.
+- **ReSync**: Triggers a full reset by **deleting all existing source_pages** and re-creating the seed page to ensure a fresh crawl.
 
 ## Search
 - **Hybrid Search**: Combines BM25 (Keyword) and Vector Similarity.
