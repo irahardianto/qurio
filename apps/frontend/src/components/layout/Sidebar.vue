@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { Database, Settings, Box } from 'lucide-vue-next'
+import { Database, Settings, Box, LayoutDashboard, AlertTriangle } from 'lucide-vue-next'
 
 const route = useRoute()
 
@@ -22,6 +22,18 @@ const isActive = (path: string) => route.path === path
         class="nav-item"
         :class="{ active: isActive('/') }"
       >
+        <LayoutDashboard
+          class="nav-icon"
+          :size="20"
+        />
+        <span>Dashboard</span>
+      </RouterLink>
+
+      <RouterLink
+        to="/sources"
+        class="nav-item"
+        :class="{ active: isActive('/sources') }"
+      >
         <Database
           class="nav-icon"
           :size="20"
@@ -29,6 +41,18 @@ const isActive = (path: string) => route.path === path
         <span>Sources</span>
       </RouterLink>
       
+      <RouterLink
+        to="/jobs"
+        class="nav-item"
+        :class="{ active: isActive('/jobs') }"
+      >
+        <AlertTriangle
+          class="nav-icon"
+          :size="20"
+        />
+        <span>Failed Jobs</span>
+      </RouterLink>
+
       <RouterLink
         to="/settings"
         class="nav-item"

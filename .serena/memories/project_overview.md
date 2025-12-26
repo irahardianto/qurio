@@ -9,13 +9,13 @@ Qurio is a self-hosted, open-source ingestion and retrieval engine designed to p
 - **Architecture:** Go Backend, Vue Frontend, Python Worker, PostgreSQL + Weaviate.
 
 ## Current Status
-- **Date:** 2025-12-25
+- **Date:** 2025-12-26
 - **Completed:** 
   - Deployment (Docker)
   - Core Ingestion (Web/File) & Retrieval (MCP)
   - Settings (Alpha/TopK)
   - Bug Fixes & Standardization (Correlation IDs, API Envelopes)
-- **Completed:**
   - Part 4.2: Advanced Ingestion (Sitemap/llms.txt), Re-sync Integrity, Cohere Reranker.
 - **Next:** 
-  - UI Polish, Final E2E Suite, Documentation.
+  - Part 5.1: Admin Completeness (Dashboard, Failed Jobs/DLQ), Source Cleanup, Documentation.
+  - Final E2E Testing.

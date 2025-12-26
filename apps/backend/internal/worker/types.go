@@ -25,3 +25,7 @@ type SourceStatusUpdater interface {
 	UpdateStatus(ctx context.Context, id, status string) error
 	UpdateBodyHash(ctx context.Context, id, hash string) error
 }
+
+type SourceFetcher interface {
+	GetSourceDetails(ctx context.Context, id string) (string, string, error)
+}

@@ -52,6 +52,18 @@ func (s *Store) DeleteChunksByURL(ctx context.Context, sourceID, url string) err
 	return err
 }
 
+func (s *Store) DeleteChunksBySourceID(ctx context.Context, sourceID string) error {
+	_, err := s.client.Batch().ObjectsBatchDeleter().
+		WithClassName("DocumentChunk").
+		WithOutput("minimal").
+		WithWhere(filters.Where().
+			WithPath([]string{"sourceId"}).
+			WithOperator(filters.Equal).
+			WithValueString(sourceID)).
+		Do(ctx)
+	return err
+}
+
 func (s *Store) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int) ([]retrieval.SearchResult, error) {
 	hybrid := s.client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
@@ -180,4 +192,37 @@ func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk,
 		}
 	}
 	return chunks, nil
+}
+
+func (s *Store) CountChunks(ctx context.Context) (int, error) {
+	meta, err := s.client.GraphQL().Aggregate().
+		WithClassName("DocumentChunk").
+		WithFields(graphql.Field{
+			Name: "meta",
+			Fields: []graphql.Field{
+				{Name: "count"},
+			},
+		}).
+		Do(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(meta.Errors) > 0 {
+		return 0, fmt.Errorf("graphql error: %v", meta.Errors)
+	}
+	
+	if data, ok := meta.Data["Aggregate"].(map[string]interface{}); ok {
+		if chunks, ok := data["DocumentChunk"].([]interface{}); ok {
+			if len(chunks) > 0 {
+				if props, ok := chunks[0].(map[string]interface{}); ok {
+					if metaStats, ok := props["meta"].(map[string]interface{}); ok {
+						if count, ok := metaStats["count"].(float64); ok {
+							return int(count), nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return 0, nil
 }

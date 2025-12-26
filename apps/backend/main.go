@@ -12,6 +12,8 @@ import (
 
 	"qurio/apps/backend/features/mcp"
 	"qurio/apps/backend/features/source"
+	"qurio/apps/backend/features/job"
+	"qurio/apps/backend/features/stats"
 	"qurio/apps/backend/internal/adapter/gemini"
 	"qurio/apps/backend/internal/adapter/reranker"
 	wstore "qurio/apps/backend/internal/adapter/weaviate"
@@ -179,6 +181,14 @@ func main() {
 	sourceService := source.NewService(sourceRepo, nsqProducer, vecStore, settingsService)
 	sourceHandler := source.NewHandler(sourceService)
 
+	// Feature: Job
+	jobRepo := job.NewPostgresRepo(db)
+	jobService := job.NewService(jobRepo, nsqProducer)
+	jobHandler := job.NewHandler(jobService)
+
+	// Feature: Stats
+	statsHandler := stats.NewHandler(sourceRepo, jobRepo, vecStore)
+
 	// Adapters: Dynamic
 	geminiEmbedder := gemini.NewDynamicEmbedder(settingsService)
 	rerankerClient := reranker.NewDynamicClient(settingsService)
@@ -209,6 +219,11 @@ func main() {
 	http.Handle("GET /settings", middleware.CorrelationID(enableCORS(settingsHandler.GetSettings)))
 	http.Handle("PUT /settings", middleware.CorrelationID(enableCORS(settingsHandler.UpdateSettings)))
 
+	http.Handle("GET /jobs/failed", middleware.CorrelationID(enableCORS(jobHandler.List)))
+	http.Handle("POST /jobs/{id}/retry", middleware.CorrelationID(enableCORS(jobHandler.Retry)))
+
+	http.Handle("GET /stats", middleware.CorrelationID(enableCORS(statsHandler.GetStats)))
+
 	// Feature: Retrieval & MCP
 	queryLogger, err := retrieval.NewFileQueryLogger("data/logs/query.log")
 	if err != nil {
@@ -225,7 +240,8 @@ func main() {
 	http.Handle("POST /mcp/messages", middleware.CorrelationID(enableCORS(mcpHandler.HandleMessage)))
 
 	// Worker (Result Consumer)
-	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo)
+	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo}
+	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter)
 	
 	nsqCfg = nsq.NewConfig()
 	// Consume 'ingest.result' topic, 'worker' channel (or 'backend' channel to be distinct from python worker channel if relevant)
@@ -258,4 +274,17 @@ func main() {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// Adapter for SourceFetcher in Worker
+type sourceFetcherAdapter struct {
+	repo source.Repository
+}
+
+func (a *sourceFetcherAdapter) GetSourceDetails(ctx context.Context, id string) (string, string, error) {
+	s, err := a.repo.Get(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	return s.Type, s.URL, nil
 }

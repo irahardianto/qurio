@@ -30,10 +30,12 @@ type Repository interface {
 	UpdateStatus(ctx context.Context, id, status string) error
 	UpdateBodyHash(ctx context.Context, id, hash string) error
 	SoftDelete(ctx context.Context, id string) error
+	Count(ctx context.Context) (int, error)
 }
 
 type ChunkStore interface {
 	GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error)
+	DeleteChunksBySourceID(ctx context.Context, sourceID string) error
 }
 
 type EventPublisher interface {
@@ -171,6 +173,11 @@ func (s *Service) List(ctx context.Context) ([]Source, error) {
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
+	// 1. Clean Vector Store
+	if err := s.chunkStore.DeleteChunksBySourceID(ctx, id); err != nil {
+		return err
+	}
+	// 2. Soft Delete DB
 	return s.repo.SoftDelete(ctx, id)
 }
 

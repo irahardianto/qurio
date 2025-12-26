@@ -9,17 +9,20 @@ import (
 	"time"
 
 	"github.com/nsqio/go-nsq"
+	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/internal/text"
 )
 
 type ResultConsumer struct {
-	embedder Embedder
-	store    VectorStore
-	updater  SourceStatusUpdater
+	embedder      Embedder
+	store         VectorStore
+	updater       SourceStatusUpdater
+	jobRepo       job.Repository
+	sourceFetcher SourceFetcher
 }
 
-func NewResultConsumer(e Embedder, s VectorStore, u SourceStatusUpdater) *ResultConsumer {
-	return &ResultConsumer{embedder: e, store: s, updater: u}
+func NewResultConsumer(e Embedder, s VectorStore, u SourceStatusUpdater, j job.Repository, sf SourceFetcher) *ResultConsumer {
+	return &ResultConsumer{embedder: e, store: s, updater: u, jobRepo: j, sourceFetcher: sf}
 }
 
 func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
@@ -46,6 +49,35 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		if err := h.updater.UpdateStatus(ctx, payload.SourceID, "failed"); err != nil {
 			slog.Warn("failed to update status to failed", "error", err)
 		}
+
+		// Save Failed Job
+		sType, sURL, err := h.sourceFetcher.GetSourceDetails(ctx, payload.SourceID)
+		if err != nil {
+			slog.Error("failed to fetch source details for failed job", "error", err)
+		} else {
+			jobPayload := map[string]interface{}{
+				"type": sType,
+				"id":   payload.SourceID,
+			}
+			if sType == "file" {
+				jobPayload["path"] = sURL
+			} else {
+				jobPayload["url"] = sURL
+			}
+
+			pBytes, _ := json.Marshal(jobPayload)
+
+			failedJob := &job.Job{
+				SourceID: payload.SourceID,
+				Handler:  sType,
+				Payload:  json.RawMessage(pBytes),
+				Error:    payload.Error,
+			}
+			if err := h.jobRepo.Save(ctx, failedJob); err != nil {
+				slog.Error("failed to save failed job", "error", err)
+			}
+		}
+
 		return nil
 	}
 

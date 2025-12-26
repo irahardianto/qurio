@@ -76,3 +76,10 @@ func (r *PostgresRepo) UpdateBodyHash(ctx context.Context, id, hash string) erro
 	_, err := r.db.ExecContext(ctx, query, hash, id)
 	return err
 }
+
+func (r *PostgresRepo) Count(ctx context.Context) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM sources WHERE deleted_at IS NULL`
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	return count, err
+}
