@@ -24,6 +24,8 @@
     - Consumes: `ingest.result`
     - **Idempotency:** Calls `DeleteChunksByURL` before storing new chunks for a given source + URL to prevent duplicates during re-sync.
     - Actions: Chunking -> Embedding (Gemini) -> Storage (Weaviate).
+    - **Failure Handling:** If `status="failed"`, payload is saved to `failed_jobs` table. Can be manually re-queued via API.
+    - **Source Deletion:** Hard-deletes chunks from Weaviate using `source_id` before soft-deleting the source record.
 
 ## Frontend Architecture
 - **Settings UI:**

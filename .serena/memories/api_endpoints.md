@@ -49,4 +49,15 @@ All error responses follow this envelope:
 ## Health
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/health` | Service health check | - |
+| `GET` \| `/health` \| Service health check \| - \|
+
+## Jobs (Failures)
+| Method | Endpoint | Description | Payload/Params |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/jobs/failed` | List all failed ingestion jobs | - |
+| `POST` | `/jobs/{id}/retry` | Retry a failed job | - |
+
+## Stats
+| Method | Endpoint | Description | Payload/Params |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/stats` | Get system counts (sources, docs, failures) | - |

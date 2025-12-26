@@ -17,5 +17,5 @@ Qurio is a self-hosted, open-source ingestion and retrieval engine designed to p
   - Bug Fixes & Standardization (Correlation IDs, API Envelopes)
   - Part 4.2: Advanced Ingestion (Sitemap/llms.txt), Re-sync Integrity, Cohere Reranker.
 - **Next:** 
-  - Part 5.1: Admin Completeness (Dashboard, Failed Jobs/DLQ), Source Cleanup, Documentation.
+  - Part 5.1: Admin Completeness (Dashboard, Failed Jobs/DLQ), Source Cleanup, Documentation. (Done)
   - Final E2E Testing.

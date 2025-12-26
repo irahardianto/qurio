@@ -46,7 +46,7 @@ Qurio is a self-hosted, open-source context retrieval engine designed to provide
    ```
 
 4. **Verify:**
-   - **Dashboard:** http://localhost:5173
+   - **Dashboard:** http://localhost:3000
    - **API Health:** http://localhost:8081/health
    - **Weaviate:** http://localhost:8080/v1/meta
 
