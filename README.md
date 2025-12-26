@@ -2,8 +2,7 @@
 
 <img src="docs/logo/qurio-inverted-black.png" alt="Qurio Logo" width="650"/>
 
-# Qurio
-**Know More, Hallucinate Less**
+---
 
 [![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Vue](https://img.shields.io/badge/Vue.js-3.x-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
