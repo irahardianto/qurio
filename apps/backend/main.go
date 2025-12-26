@@ -130,10 +130,6 @@ func main() {
 	}
 
 	// Pre-create 'ingest' topic to avoid consumer startup errors
-	// NSQ creates topics lazily on publish, but consumers querying lookupd will fail 404 until then.
-	// We hit the nsqd http api to create it explicitly.
-	// cfg.NSQDHost is "nsqd:4150" (TCP), we need HTTP port 4151
-	// Assuming nsqd host is resolvable and port 4151 is standard
 	nsqHttpURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", "nsqd")
 	nsqResultURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", "nsqd")
 	
@@ -215,6 +211,7 @@ func main() {
 	http.Handle("GET /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Get)))
 	http.Handle("DELETE /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Delete)))
 	http.Handle("POST /sources/{id}/resync", middleware.CorrelationID(enableCORS(sourceHandler.ReSync)))
+	http.Handle("GET /sources/{id}/pages", middleware.CorrelationID(enableCORS(sourceHandler.GetPages)))
 
 	http.Handle("GET /settings", middleware.CorrelationID(enableCORS(settingsHandler.GetSettings)))
 	http.Handle("PUT /settings", middleware.CorrelationID(enableCORS(settingsHandler.UpdateSettings)))
@@ -240,25 +237,31 @@ func main() {
 	http.Handle("POST /mcp/messages", middleware.CorrelationID(enableCORS(mcpHandler.HandleMessage)))
 
 	// Worker (Result Consumer)
-	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo}
-	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter)
+	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo, settings: settingsService}
+	pmAdapter := &pageManagerAdapter{repo: sourceRepo}
+	
+	// Ingestion Concurrency
+	if cfg.IngestionConcurrency < 1 {
+		cfg.IngestionConcurrency = 1
+	}
+	
+	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, nsqProducer)
 	
 	nsqCfg = nsq.NewConfig()
-	// Consume 'ingest.result' topic, 'worker' channel (or 'backend' channel to be distinct from python worker channel if relevant)
-	// Python worker consumes 'ingest.task'.
-	// Go consumes 'ingest.result'.
 	consumer, err := nsq.NewConsumer("ingest.result", "backend", nsqCfg)
 	if err != nil {
 		slog.Error("failed to create NSQ consumer for results", "error", err)
 	} else {
-		consumer.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
+		// Use AddConcurrentHandlers
+		consumer.AddConcurrentHandlers(nsq.HandlerFunc(func(m *nsq.Message) error {
 			return resultConsumer.HandleMessage(m)
-		}))
+		}), cfg.IngestionConcurrency)
+		
 		// Connect to Lookupd
 		if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
 			slog.Error("failed to connect to NSQLookupd", "error", err)
 		} else {
-			slog.Info("NSQ Result Consumer connected")
+			slog.Info("NSQ Result Consumer connected", "concurrency", cfg.IngestionConcurrency)
 		}
 	}
 
@@ -278,7 +281,8 @@ func main() {
 
 // Adapter for SourceFetcher in Worker
 type sourceFetcherAdapter struct {
-	repo source.Repository
+	repo     source.Repository
+	settings source.SettingsService
 }
 
 func (a *sourceFetcherAdapter) GetSourceDetails(ctx context.Context, id string) (string, string, error) {
@@ -287,4 +291,46 @@ func (a *sourceFetcherAdapter) GetSourceDetails(ctx context.Context, id string) 
 		return "", "", err
 	}
 	return s.Type, s.URL, nil
+}
+
+func (a *sourceFetcherAdapter) GetSourceConfig(ctx context.Context, id string) (int, []string, string, error) {
+	s, err := a.repo.Get(ctx, id)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	
+	set, err := a.settings.Get(ctx)
+	apiKey := ""
+	if err == nil && set != nil {
+		apiKey = set.GeminiAPIKey
+	}
+	
+	return s.MaxDepth, s.Exclusions, apiKey, nil
+}
+
+// Adapter for PageManager
+type pageManagerAdapter struct {
+	repo source.Repository
+}
+
+func (a *pageManagerAdapter) BulkCreatePages(ctx context.Context, pages []worker.PageDTO) ([]string, error) {
+	// Convert worker.PageDTO to source.SourcePage
+	var srcPages []source.SourcePage
+	for _, p := range pages {
+		srcPages = append(srcPages, source.SourcePage{
+			SourceID: p.SourceID,
+			URL:      p.URL,
+			Status:   p.Status,
+			Depth:    p.Depth,
+		})
+	}
+	return a.repo.BulkCreatePages(ctx, srcPages)
+}
+
+func (a *pageManagerAdapter) UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error {
+	return a.repo.UpdatePageStatus(ctx, sourceID, url, status, err)
+}
+
+func (a *pageManagerAdapter) CountPendingPages(ctx context.Context, sourceID string) (int, error) {
+	return a.repo.CountPendingPages(ctx, sourceID)
 }

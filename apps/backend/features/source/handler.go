@@ -168,6 +168,23 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"data": detail})
 }
 
+func (h *Handler) GetPages(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pages, err := h.service.GetPages(r.Context(), id)
+	if err != nil {
+		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if pages == nil {
+		pages = []SourcePage{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data": pages,
+		"meta": map[string]int{"count": len(pages)},
+	})
+}
+
 func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

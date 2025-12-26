@@ -47,11 +47,11 @@ async def process_message(message):
         
         if task_type == 'web':
             url = data.get('url')
-            max_depth = data.get('max_depth', 0)
             exclusions = data.get('exclusions', [])
             api_key = data.get('gemini_api_key')
-            # Returns list of dicts: [{"url": "...", "content": "..."}]
-            results_list = await handle_web_task(url, max_depth=max_depth, exclusions=exclusions, api_key=api_key)
+            # Returns dict: {"url": "...", "content": "...", "links": [...]}
+            result = await handle_web_task(url, exclusions=exclusions, api_key=api_key)
+            results_list = [result]
         
         elif task_type == 'file':
             file_path = data.get('path')
@@ -63,7 +63,9 @@ async def process_message(message):
                     "source_id": source_id,
                     "content": res['content'],
                     "url": res['url'],
-                    "status": "success"
+                    "status": "success",
+                    "links": res.get('links', []),
+                    "depth": data.get('depth', 0)
                 }
                 
                 producer.pub(
@@ -137,7 +139,7 @@ def main():
         lookupd_http_addresses=[settings.nsq_lookupd_http],
         topic=settings.nsq_topic_ingest,
         channel=settings.nsq_channel_worker,
-        max_in_flight=1
+        max_in_flight=settings.nsq_max_in_flight
     )
     
     # Create Producer (Writer)

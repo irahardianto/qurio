@@ -23,7 +23,27 @@ type Source struct {
 	Exclusions  []string `json:"exclusions"`
 }
 
+type SourcePage struct {
+	ID        string `json:"id"`
+	SourceID  string `json:"source_id"`
+	URL       string `json:"url"`
+	Status    string `json:"status"` // pending, processing, completed, failed
+	Depth     int    `json:"depth"`
+	Error     string `json:"error,omitempty"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type Repository interface {
+	// Pages
+	BulkCreatePages(ctx context.Context, pages []SourcePage) ([]string, error)
+	UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error
+	GetPages(ctx context.Context, sourceID string) ([]SourcePage, error)
+	DeletePages(ctx context.Context, sourceID string) error
+	CountPendingPages(ctx context.Context, sourceID string) (int, error)
+	
+	// Sources
+
 	Save(ctx context.Context, src *Source) error
 	ExistsByHash(ctx context.Context, hash string) (bool, error)
 	Get(ctx context.Context, id string) (*Source, error)
@@ -83,6 +103,20 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		return err
 	}
 
+	// 2.1 Create Seed Page (Crawl Frontier)
+	if src.Type == "web" {
+		_, err = s.repo.BulkCreatePages(ctx, []SourcePage{{
+			SourceID: src.ID,
+			URL:      src.URL,
+			Status:   "pending",
+			Depth:    0,
+		}})
+		if err != nil {
+			// Log error but proceed? No, fail.
+			return fmt.Errorf("failed to create seed page: %w", err)
+		}
+	}
+
 	// 3. Get Settings
 	set, err := s.settings.Get(ctx)
 	apiKey := ""
@@ -95,6 +129,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		"type":           src.Type,
 		"url":            src.URL,
 		"id":             src.ID,
+		"depth":          0, // Seed depth
 		"max_depth":      src.MaxDepth,
 		"exclusions":     src.Exclusions,
 		"gemini_api_key": apiKey,
@@ -195,6 +230,23 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		return err
 	}
 
+	// Clean up pages for fresh start
+	if src.Type == "web" {
+		if err := s.repo.DeletePages(ctx, id); err != nil {
+			return fmt.Errorf("failed to clean up pages: %w", err)
+		}
+		// Re-create Seed Page
+		_, err = s.repo.BulkCreatePages(ctx, []SourcePage{{
+			SourceID: src.ID,
+			URL:      src.URL,
+			Status:   "pending",
+			Depth:    0,
+		}})
+		if err != nil {
+			return fmt.Errorf("failed to recreate seed page: %w", err)
+		}
+	}
+
 	set, err := s.settings.Get(ctx)
 	apiKey := ""
 	if err == nil && set != nil {
@@ -212,6 +264,7 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		payloadMap["path"] = src.URL
 	} else {
 		payloadMap["url"] = src.URL
+		payloadMap["depth"] = 0 // Reset depth
 		payloadMap["max_depth"] = src.MaxDepth
 		payloadMap["exclusions"] = src.Exclusions
 		payloadMap["gemini_api_key"] = apiKey
@@ -223,4 +276,8 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) GetPages(ctx context.Context, id string) ([]SourcePage, error) {
+	return s.repo.GetPages(ctx, id)
 }

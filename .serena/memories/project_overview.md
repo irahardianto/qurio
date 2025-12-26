@@ -5,6 +5,7 @@ The Qurio MVP is now functionally complete.
 **Key Achievements:**
 - **Infrastructure:** Docker Compose stack (Postgres, Weaviate, NSQ, Go Backend, Python Worker, Vue Frontend) verified.
 - **Core Features:**
+  - **Distributed Web Ingestion** (Page-level parallel crawling).
   - Web & File Ingestion (with deduplication).
   - Hybrid Search (BM25 + Vector) with optional Reranking (Jina/Cohere).
   - MCP Endpoint (JSON-RPC 2.0 & SSE).

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,16 +17,43 @@ import (
 	"qurio/apps/backend/internal/text"
 )
 
+type PageDTO struct {
+	SourceID string
+	URL      string
+	Status   string
+	Depth    int
+}
+
+type PageManager interface {
+	BulkCreatePages(ctx context.Context, pages []PageDTO) ([]string, error)
+	UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error
+	CountPendingPages(ctx context.Context, sourceID string) (int, error)
+}
+
+type TaskPublisher interface {
+	Publish(topic string, body []byte) error
+}
+
 type ResultConsumer struct {
 	embedder      Embedder
 	store         VectorStore
 	updater       SourceStatusUpdater
 	jobRepo       job.Repository
 	sourceFetcher SourceFetcher
+	pageManager   PageManager
+	publisher     TaskPublisher
 }
 
-func NewResultConsumer(e Embedder, s VectorStore, u SourceStatusUpdater, j job.Repository, sf SourceFetcher) *ResultConsumer {
-	return &ResultConsumer{embedder: e, store: s, updater: u, jobRepo: j, sourceFetcher: sf}
+func NewResultConsumer(e Embedder, s VectorStore, u SourceStatusUpdater, j job.Repository, sf SourceFetcher, pm PageManager, tp TaskPublisher) *ResultConsumer {
+	return &ResultConsumer{
+		embedder:      e,
+		store:         s,
+		updater:       u,
+		jobRepo:       j,
+		sourceFetcher: sf,
+		pageManager:   pm,
+		publisher:     tp,
+	}
 }
 
 func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
@@ -33,12 +62,14 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	var payload struct {
-		SourceID      string `json:"source_id"`
-		Content       string `json:"content"`
-		URL           string `json:"url"`
-		Status        string `json:"status,omitempty"` // "success" or "failed"
-		Error         string `json:"error,omitempty"`
-		CorrelationID string `json:"correlation_id,omitempty"`
+		SourceID      string   `json:"source_id"`
+		Content       string   `json:"content"`
+		URL           string   `json:"url"`
+		Status        string   `json:"status,omitempty"` // "success" or "failed"
+		Error         string   `json:"error,omitempty"`
+		Links         []string `json:"links,omitempty"`
+		Depth         int      `json:"depth"`
+		CorrelationID string   `json:"correlation_id,omitempty"`
 	}
 	if err := json.Unmarshal(m.Body, &payload); err != nil {
 		slog.Error("invalid message format", "error", err)
@@ -53,108 +84,164 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	ctx := context.Background()
 	ctx = middleware.WithCorrelationID(ctx, correlationID)
 	
+	// Handle Failure
 	if payload.Status == "failed" {
-		slog.ErrorContext(ctx, "ingestion failed", "source_id", payload.SourceID, "error", payload.Error, "correlationId", correlationID)
-		if err := h.updater.UpdateStatus(ctx, payload.SourceID, "failed"); err != nil {
-			slog.WarnContext(ctx, "failed to update status to failed", "error", err, "correlationId", correlationID)
+		slog.ErrorContext(ctx, "ingestion failed", "source_id", payload.SourceID, "url", payload.URL, "error", payload.Error)
+		
+		// Update Page Status
+		if payload.URL != "" {
+			_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, payload.URL, "failed", payload.Error)
 		}
 
-		// Save Failed Job
-		sType, sURL, err := h.sourceFetcher.GetSourceDetails(ctx, payload.SourceID)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch source details for failed job", "error", err, "correlationId", correlationID)
-		} else {
-			jobPayload := map[string]interface{}{
-				"type": sType,
-				"id":   payload.SourceID,
-			}
-			if sType == "file" {
-				jobPayload["path"] = sURL
-			} else {
-				jobPayload["url"] = sURL
-			}
-
-			pBytes, _ := json.Marshal(jobPayload)
-
-			failedJob := &job.Job{
-				SourceID: payload.SourceID,
-				Handler:  sType,
-				Payload:  json.RawMessage(pBytes),
-				Error:    payload.Error,
-			}
-			if err := h.jobRepo.Save(ctx, failedJob); err != nil {
-				slog.ErrorContext(ctx, "failed to save failed job", "error", err, "correlationId", correlationID)
+		// Check if we should fail the source (maybe not? individual page failure shouldn't fail source?)
+		// For now, let's keep the source "in_progress" but log the failure.
+		// If it was the SEED page, maybe fail source?
+		if payload.Depth == 0 {
+			if err := h.updater.UpdateStatus(ctx, payload.SourceID, "failed"); err != nil {
+				slog.WarnContext(ctx, "failed to update source status to failed", "error", err)
 			}
 		}
 
+		// Save Failed Job (optional, maybe redundant with source_pages error)
 		return nil
 	}
 
-	slog.InfoContext(ctx, "received result", "source_id", payload.SourceID, "content_len", len(payload.Content), "correlationId", correlationID)
+	slog.InfoContext(ctx, "received result", "source_id", payload.SourceID, "url", payload.URL, "content_len", len(payload.Content))
 
-	// 0. Delete Old Chunks (Idempotency)
+	// 0. Update Page Status to Processing (or skip, just update to completed at end)
+	
+	// 1. Delete Old Chunks (Idempotency)
 	if payload.URL != "" {
 		if err := h.store.DeleteChunksByURL(ctx, payload.SourceID, payload.URL); err != nil {
-			slog.ErrorContext(ctx, "failed to delete old chunks", "error", err, "source_id", payload.SourceID, "url", payload.URL, "correlationId", correlationID)
-			return err // Retry on error to ensure consistency
+			slog.ErrorContext(ctx, "failed to delete old chunks", "error", err)
+			return err 
 		}
 	}
 
-	// 1. Update Hash
+	// 2. Chunk, Embed, Store
+	if payload.Content != "" {
+		chunks := text.Chunk(payload.Content, 512, 50)
+		if len(chunks) > 0 {
+			for i, c := range chunks {
+				err := func() error {
+					embedCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+					defer cancel()
+
+					vector, err := h.embedder.Embed(embedCtx, c)
+					if err != nil {
+						return err
+					}
+
+					chunk := Chunk{
+						Content:    c,
+						Vector:     vector,
+						SourceID:   payload.SourceID,
+						SourceURL:  payload.URL,
+						ChunkIndex: i,
+					}
+
+					return h.store.StoreChunk(embedCtx, chunk)
+				}()
+				if err != nil {
+					slog.ErrorContext(ctx, "store chunk failed", "error", err)
+					return err
+				}
+			}
+			slog.InfoContext(ctx, "stored chunks", "count", len(chunks))
+		}
+	}
+
+	// 3. Update Source Body Hash (Only for seed? Or aggregate? Maybe just last update)
 	hash := sha256.Sum256([]byte(payload.Content))
 	hashStr := fmt.Sprintf("%x", hash)
-	if err := h.updater.UpdateBodyHash(ctx, payload.SourceID, hashStr); err != nil {
-		slog.WarnContext(ctx, "failed to update body hash", "error", err, "correlationId", correlationID)
-	}
+	_ = h.updater.UpdateBodyHash(ctx, payload.SourceID, hashStr)
 
-	// 2. Chunk
-	chunks := text.Chunk(payload.Content, 512, 50)
-	if len(chunks) == 0 {
-		slog.WarnContext(ctx, "no chunks generated", "source_id", payload.SourceID, "correlationId", correlationID)
-		_ = h.updater.UpdateStatus(ctx, payload.SourceID, "completed")
-		return nil
-	}
-
-	// 3. Embed & Store
-	for i, c := range chunks {
-		err := func() error {
-			// Pass correlation ID to child context (though Context already has it via Value)
-			// But creating new context with timeout might strip values if not careful?
-			// context.WithTimeout derives from parent, so values are preserved.
-			embedCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-			defer cancel()
-
-			vector, err := h.embedder.Embed(embedCtx, c)
-			if err != nil {
-				slog.ErrorContext(ctx, "embed failed", "error", err, "correlationId", correlationID)
-				return err
-			}
-
-			chunk := Chunk{
-				Content:    c,
-				Vector:     vector,
-				SourceID:   payload.SourceID,
-				SourceURL:  payload.URL,
-				ChunkIndex: i,
-			}
-
-			if err := h.store.StoreChunk(embedCtx, chunk); err != nil {
-				slog.ErrorContext(ctx, "store failed", "error", err, "correlationId", correlationID)
-				return err
-			}
-			return nil
-		}()
+	// 4. Distributed Crawl: Link Discovery
+	if payload.URL != "" && len(payload.Links) > 0 {
+		maxDepth, exclusions, apiKey, err := h.sourceFetcher.GetSourceConfig(ctx, payload.SourceID)
 		if err != nil {
-			return err
+			slog.ErrorContext(ctx, "failed to fetch source config", "error", err)
+		} else if payload.Depth < maxDepth {
+			var newPages []PageDTO
+			seen := make(map[string]bool)
+			
+			u, _ := url.Parse(payload.URL)
+			host := u.Host
+			
+			for _, link := range payload.Links {
+				// 1. External Check
+				linkU, err := url.Parse(link)
+				if err != nil || linkU.Host != host {
+					continue
+				}
+				
+				// 2. Exclusion Check
+				excluded := false
+				for _, ex := range exclusions {
+					if matched, _ := regexp.MatchString(ex, link); matched {
+						excluded = true
+						break
+					}
+				}
+				if excluded {
+					continue
+				}
+				
+				if seen[link] { continue }
+				seen[link] = true
+				
+				newPages = append(newPages, PageDTO{
+					SourceID: payload.SourceID,
+					URL:      link,
+					Status:   "pending",
+					Depth:    payload.Depth + 1,
+				})
+			}
+			
+			if len(newPages) > 0 {
+				newURLs, err := h.pageManager.BulkCreatePages(ctx, newPages)
+				if err != nil {
+					slog.ErrorContext(ctx, "failed to bulk create pages", "error", err)
+				} else {
+					slog.InfoContext(ctx, "discovered new pages", "count", len(newURLs))
+					for _, newURL := range newURLs {
+						taskPayload, _ := json.Marshal(map[string]interface{}{
+							"type":           "web",
+							"url":            newURL,
+							"id":             payload.SourceID,
+							"depth":          payload.Depth + 1,
+							"max_depth":      maxDepth,
+							"exclusions":     exclusions,
+							"gemini_api_key": apiKey,
+							"correlation_id": correlationID,
+						})
+						if err := h.publisher.Publish("ingest.task", taskPayload); err != nil {
+							slog.ErrorContext(ctx, "failed to publish task, marking page as failed", "error", err, "url", newURL)
+							_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, newURL, "failed", fmt.Sprintf("Failed to publish task: %v", err))
+						}
+					}
+				}
+			}
 		}
 	}
 
-	slog.InfoContext(ctx, "stored chunks", "count", len(chunks), "source_id", payload.SourceID, "correlationId", correlationID)
-	
-	// 4. Update Status
-	if err := h.updater.UpdateStatus(ctx, payload.SourceID, "completed"); err != nil {
-		slog.WarnContext(ctx, "failed to update status", "error", err, "correlationId", correlationID)
+	// 5. Update Page Status to Completed
+	if payload.URL != "" {
+		if err := h.pageManager.UpdatePageStatus(ctx, payload.SourceID, payload.URL, "completed", ""); err != nil {
+			slog.WarnContext(ctx, "failed to update page status", "error", err)
+		}
 	}
 
+	// 6. Check Source Completion
+	pendingCount, err := h.pageManager.CountPendingPages(ctx, payload.SourceID)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to count pending pages", "error", err)
+	} else if pendingCount == 0 {
+		slog.InfoContext(ctx, "source ingestion completed", "source_id", payload.SourceID)
+		if err := h.updater.UpdateStatus(ctx, payload.SourceID, "completed"); err != nil {
+			slog.WarnContext(ctx, "failed to update source status to completed", "error", err)
+		}
+	}
+	
 	return nil
 }

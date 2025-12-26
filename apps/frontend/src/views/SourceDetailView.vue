@@ -1,26 +1,54 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSourceStore } from '../features/sources/source.store'
+import { useSourceStore, type SourcePage } from '../features/sources/source.store'
 import { ArrowLeft, Database, FileText, Layers } from 'lucide-vue-next'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import SourceProgress from '../features/sources/SourceProgress.vue'
 
 const route = useRoute()
 const router = useRouter()
 const store = useSourceStore()
 
 const source = ref<any>(null)
+const pages = ref<SourcePage[]>([])
 const isLoading = ref(true)
+let pollingInterval: any = null
+
+const fetchPages = async () => {
+  const id = route.params.id as string
+  if (id) {
+    pages.value = await store.getSourcePages(id)
+  }
+}
 
 onMounted(async () => {
   const id = route.params.id as string
   if (id) {
     source.value = await store.getSource(id)
+    await fetchPages()
     isLoading.value = false
+
+    // Poll if active
+    if (source.value?.status === 'in_progress' || source.value?.status === 'pending' || source.value?.status === 'processing') {
+      pollingInterval = setInterval(async () => {
+        source.value = await store.getSource(id) // Update status
+        await fetchPages()
+        
+        // Stop polling if done
+        if (source.value?.status === 'completed' || source.value?.status === 'failed') {
+          clearInterval(pollingInterval)
+        }
+      }, 2000)
+    }
   }
+})
+
+onUnmounted(() => {
+  if (pollingInterval) clearInterval(pollingInterval)
 })
 </script>
 
@@ -111,8 +139,16 @@ onMounted(async () => {
         </CardContent>
       </Card>
 
+      <!-- Progress Section (Only for Web Sources or if pages exist) -->
+      <div 
+        v-if="source.type === 'web' || pages.length > 0" 
+        class="md:col-span-2"
+      >
+        <SourceProgress :pages="pages" />
+      </div>
+
       <!-- Chunks List -->
-      <Card class="md:col-span-2">
+      <Card class="md:col-span-3">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Layers class="h-4 w-4" />

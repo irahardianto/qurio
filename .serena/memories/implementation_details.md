@@ -1,34 +1,41 @@
 # Implementation Details
 
-## Configuration & Settings
-- **Settings Table:** Stores global configuration (singleton row `id=1`).
-    - `rerank_provider` (text): 'none', 'jina', 'cohere'.
-    - `rerank_api_key` (text).
-    - `gemini_api_key` (text).
-    - `search_alpha` (float): Global default for hybrid search balance (0.0=Keyword, 1.0=Vector).
-    - `search_top_k` (int): Global default for max results (UI label: "Max Results").
+## Ingestion System (Distributed)
+The ingestion system uses a distributed page-level crawl architecture.
 
-## Search & Retrieval
-- **Hybrid Search:** Uses Weaviate's `alpha` parameter.
-- **Smart Tooling:** The `search` MCP tool accepts optional `alpha` and `limit` arguments.
-    - If provided by agent, these override the global defaults.
-    - If missing, global defaults are used.
-- **Agent Guide:** The `search` tool description includes a table guiding the agent on when to use specific alpha values (e.g., "0.0 for Error Codes").
+### Components
+1. **Database**:
+   - `sources` table: Stores configuration (max_depth, exclusions).
+   - `source_pages` table: Tracks individual pages (URL, status, depth).
 
-## Ingestion Architecture
-- **Worker (Python):** Handles crawling (`crawl4ai`) and file conversion (`docling`).
-    - **Advanced Ingestion:** Supports `sitemap.xml` and `llms.txt` discovery to prioritize and seed URLs.
-    - Consumes: `ingest.task` (NSQ)
-    - Produces: `ingest.result` (NSQ) -> Backend
-- **Backend (Go):**
-    - Consumes: `ingest.result`
-    - **Idempotency:** Calls `DeleteChunksByURL` before storing new chunks for a given source + URL to prevent duplicates during re-sync.
-    - Actions: Chunking -> Embedding (Gemini) -> Storage (Weaviate).
-    - **Failure Handling:** If `status="failed"`, payload is saved to `failed_jobs` table. Can be manually re-queued via API.
-    - **Source Deletion:** Hard-deletes chunks from Weaviate using `source_id` before soft-deleting the source record.
+2. **Ingestion Worker (Python)**:
+   - Processes single pages.
+   - Extracts content (markdown) and internal links.
+   - Returns result to NSQ `ingest.result`.
+   - Uses `Crawl4AI` with `AsyncWebCrawler`.
 
-## Frontend Architecture
-- **Settings UI:**
-    - "Search Balance" slider (controls `search_alpha`).
-    - "Max Results" input (controls `search_top_k`).
-    - Includes tooltips for user education.
+3. **Backend (Go)**:
+   - **Producer**: Creates `Source` and seed `SourcePage`. Publishes seed task to `ingest.task`.
+   - **Consumer**: Listens to `ingest.result`.
+     - Processes content (chunking, embedding, vector storage).
+     - **Link Discovery**: Filters new links, deduplicates against `source_pages`, creates new pages, and enqueues new tasks if `depth < max_depth`.
+     - **Concurrency**: Uses `AddConcurrentHandlers` (configured by `INGESTION_CONCURRENCY`).
+
+### Flow
+1. User creates Source (Web).
+2. Backend saves Source, creates Seed Page (Depth 0), publishes Task.
+3. Worker picks up Task, crawls URL, extracts Links.
+4. Worker publishes Result (Content + Links).
+5. Backend Consumer processes Result.
+   - Stores Chunks.
+   - If `depth < max_depth`:
+     - Filters links (internal only, exclusions).
+     - Bulk inserts new `SourcePage` records (ignoring duplicates).
+     - Publishes new Tasks for new pages (Depth + 1).
+   - Updates Page Status to "completed".
+6. Frontend polls `GET /sources/{id}/pages` to update the real-time progress bar and "Active Crawls" list.
+
+## Search
+- **Hybrid Search**: Combines BM25 (Keyword) and Vector Similarity.
+- **Reranking**: Optional reranking step using Jina/Cohere.
+- **Dynamic Tuning**: Alpha parameter (0.0 - 1.0) controls weight between keyword and vector search.

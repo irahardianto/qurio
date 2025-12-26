@@ -12,6 +12,17 @@ export interface Source {
   exclusions?: string[]
 }
 
+export interface SourcePage {
+  id: string
+  source_id: string
+  url: string
+  status: string
+  depth: number
+  error?: string
+  created_at: string
+  updated_at: string
+}
+
 export const useSourceStore = defineStore('sources', () => {
   const sources = ref<Source[]>([])
   const isLoading = ref(false)
@@ -149,6 +160,18 @@ export const useSourceStore = defineStore('sources', () => {
     }
   }
 
+  async function getSourcePages(id: string) {
+    try {
+      const res = await fetch(`/api/sources/${id}/pages`)
+      if (!res.ok) throw new Error(`Failed to fetch source pages: ${res.statusText}`)
+      const json = await res.json()
+      return json.data as SourcePage[]
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      console.error('Failed to fetch source pages', e)
+      return []
+    }
+  }
+
   return { 
     sources, 
     isLoading, 
@@ -159,6 +182,7 @@ export const useSourceStore = defineStore('sources', () => {
     resyncSource,
     uploadSource,
     getSource,
+    getSourcePages,
     startPolling,
     stopPolling
   }

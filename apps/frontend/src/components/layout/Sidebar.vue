@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { Database, Settings, Box, LayoutDashboard, AlertTriangle } from 'lucide-vue-next'
+import { Database, Settings, LayoutDashboard, AlertTriangle } from 'lucide-vue-next'
 
 const route = useRoute()
 
@@ -11,7 +11,7 @@ const isActive = (path: string) => route.path === path
   <aside class="sidebar">
     <div class="logo-container">
       <div class="logo-icon">
-        <Box class="icon" />
+        <img src="/qurio.png" alt="Qurio icon" class="icon" />
       </div>
       <span class="logo-text">QURIO</span>
     </div>

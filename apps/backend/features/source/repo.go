@@ -83,3 +83,88 @@ func (r *PostgresRepo) Count(ctx context.Context) (int, error) {
 	err := r.db.QueryRowContext(ctx, query).Scan(&count)
 	return count, err
 }
+
+func (r *PostgresRepo) BulkCreatePages(ctx context.Context, pages []SourcePage) ([]string, error) {
+	if len(pages) == 0 {
+		return nil, nil
+	}
+
+	query := `INSERT INTO source_pages (source_id, url, status, depth) 
+              VALUES ($1, $2, $3, $4) 
+              ON CONFLICT (source_id, url) DO NOTHING
+              RETURNING url`
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	var newURLs []string
+	for _, p := range pages {
+		var u string
+		err := stmt.QueryRowContext(ctx, p.SourceID, p.URL, p.Status, p.Depth).Scan(&u)
+		if err == nil {
+			newURLs = append(newURLs, u)
+		} else if err != sql.ErrNoRows {
+			// Real error
+			return nil, err
+		}
+		// If ErrNoRows, it means conflict (duplicate), so we ignore
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return newURLs, nil
+}
+
+func (r *PostgresRepo) UpdatePageStatus(ctx context.Context, sourceID, url, status, errStr string) error {
+	query := `UPDATE source_pages 
+              SET status = $1, error = $2, updated_at = NOW() 
+              WHERE source_id = $3 AND url = $4`
+	_, err := r.db.ExecContext(ctx, query, status, errStr, sourceID, url)
+	return err
+}
+
+func (r *PostgresRepo) GetPages(ctx context.Context, sourceID string) ([]SourcePage, error) {
+	query := `SELECT id, source_id, url, status, depth, COALESCE(error, ''), created_at, updated_at 
+              FROM source_pages 
+              WHERE source_id = $1 
+              ORDER BY created_at ASC`
+	rows, err := r.db.QueryContext(ctx, query, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pages []SourcePage
+	for rows.Next() {
+		var p SourcePage
+		if err := rows.Scan(&p.ID, &p.SourceID, &p.URL, &p.Status, &p.Depth, &p.Error, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		pages = append(pages, p)
+	}
+	return pages, nil
+}
+
+func (r *PostgresRepo) DeletePages(ctx context.Context, sourceID string) error {
+	query := `DELETE FROM source_pages WHERE source_id = $1`
+	_, err := r.db.ExecContext(ctx, query, sourceID)
+	return err
+}
+
+func (r *PostgresRepo) CountPendingPages(ctx context.Context, sourceID string) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM source_pages 
+              WHERE source_id = $1 AND (status = 'pending' OR status = 'processing')`
+	err := r.db.QueryRowContext(ctx, query, sourceID).Scan(&count)
+	return count, err
+}

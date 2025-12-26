@@ -21,6 +21,7 @@ type Config struct {
 	DoclingURL string `envconfig:"DOCLING_URL" default:"http://docling:8000"`
 	NSQLookupd string `envconfig:"NSQ_LOOKUPD" default:"nsqlookupd:4161"`
 	NSQDHost   string `envconfig:"NSQD_HOST" default:"nsqd:4150"`
+	IngestionConcurrency int `envconfig:"INGESTION_CONCURRENCY" default:"50"`
 }
 
 func Load() (*Config, error) {

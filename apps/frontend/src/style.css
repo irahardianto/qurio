@@ -25,6 +25,12 @@
   --radius-lg: 8px;
 }
 
+.icon {
+  height: 64px;       
+  width: auto;         
+  object-fit: contain;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
