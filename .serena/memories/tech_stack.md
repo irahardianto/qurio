@@ -1,5 +1,5 @@
 - **Backend:** Go 1.24+ (Standard Library based), Weaviate (Vector DB), PostgreSQL (Metadata), NSQ (Messaging)
-- **Frontend:** Vue 3 (Composition API), Vite, TailwindCSS, Pinia
+- **Frontend:** Vue 3 (Composition API), Vite, TailwindCSS, Pinia, Shadcn-vue (Sage Theme), Lucide Icons
 - **Ingestion Worker:** Python 3.12 (Async), Crawl4AI (v0.4.x+), Docling, Pynsq
 - **AI/LLM:** Google Gemini (Model: `gemini-3-flash-preview`)
 - **Search:** Hybrid Search (Keyword + Vector) with dynamic Alpha tuning

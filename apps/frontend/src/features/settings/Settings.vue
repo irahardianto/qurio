@@ -2,6 +2,22 @@
 import { onMounted } from 'vue'
 import { useSettingsStore } from './settings.store'
 import { Save, Loader2, HelpCircle } from 'lucide-vue-next'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+
 
 const store = useSettingsStore()
 
@@ -11,242 +27,134 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="settings-form">
+  <div class="space-y-6 max-w-lg">
     <div
       v-if="store.error"
-      class="msg error"
+      class="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md"
     >
       {{ store.error }}
     </div>
     <div
       v-if="store.successMessage"
-      class="msg success"
+      class="p-3 text-sm text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-md"
     >
       {{ store.successMessage }}
     </div>
 
-    <div class="form-group">
-      <label for="geminiKey">Gemini API Key</label>
-      <input 
-        id="geminiKey" 
-        v-model="store.geminiApiKey" 
-        type="password" 
-        class="input" 
+    <div class="space-y-2">
+      <label for="geminiKey" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Gemini API Key</label>
+      <Input
+        id="geminiKey"
+        v-model="store.geminiApiKey"
+        type="password"
         placeholder="Enter Gemini API Key"
-      >
-      <p class="hint">
-        Required for generating embeddings (Google AI Studio).
+        class="font-mono"
+      />
+      <p class="text-[0.8rem] text-muted-foreground">
+        Required for generating embeddings via Google AI Studio.
       </p>
     </div>
 
-    <div class="form-group">
-      <div class="label-row">
-        <label for="searchAlpha">Search Balance: {{ store.searchAlpha }}</label>
-        <HelpCircle :size="14" class="help-icon" title="Adjusts importance of Keyword vs Vector search. 0.0=Keyword, 1.0=Conceptual" />
-      </div>
-      <input 
-        id="searchAlpha" 
-        v-model.number="store.searchAlpha" 
-        type="range" 
-        min="0" 
-        max="1" 
-        step="0.1"
-        class="input-range" 
-      >
-      <div class="range-labels">
-        <span>Exact (0.0)</span>
-        <span>Conceptual (1.0)</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <div class="label-row">
-        <label for="searchTopK">Max Results</label>
-        <HelpCircle :size="14" class="help-icon" title="Maximum number of document chunks to retrieve per search. Recommended: 10-20." />
-      </div>
-      <input 
-        id="searchTopK" 
-        v-model.number="store.searchTopK" 
-        type="number" 
-        class="input" 
-      >
-    </div>
-
-    <div class="form-group">
-      <label for="provider">Rerank Provider</label>
-      <div class="select-wrapper">
-        <select
-          id="provider"
-          v-model="store.rerankProvider"
-          class="input"
+    <div class="space-y-4">
+      <div class="space-y-2">
+        <div class="flex items-center gap-2">
+           <label for="searchAlpha" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            Search Balance: <span class="font-mono text-primary">{{ store.searchAlpha }}</span>
+          </label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <HelpCircle class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p class="max-w-xs">Adjusts importance of Keyword vs Vector search.<br>0.0 = Exact Match<br>1.0 = Conceptual Match</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <input 
+          id="searchAlpha" 
+          v-model.number="store.searchAlpha" 
+          type="range" 
+          min="0" 
+          max="1" 
+          step="0.1"
+          class="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
         >
-          <option value="none">
-            None
-          </option>
-          <option value="jina">
-            Jina AI
-          </option>
-          <option value="cohere">
-            Cohere
-          </option>
-        </select>
+        <div class="flex justify-between text-xs text-muted-foreground font-mono">
+          <span>Exact (0.0)</span>
+          <span>Conceptual (1.0)</span>
+        </div>
       </div>
-      <p class="hint">
+
+      <div class="space-y-2">
+        <div class="flex items-center gap-2">
+          <label for="searchTopK" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Max Results</label>
+           <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <HelpCircle class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Maximum number of document chunks to retrieve per search.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <Input
+          id="searchTopK"
+          v-model.number="store.searchTopK"
+          type="number"
+          class="font-mono"
+        />
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <label for="provider" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Rerank Provider</label>
+      <Select v-model="store.rerankProvider">
+        <SelectTrigger class="w-full">
+          <SelectValue placeholder="Select a provider" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">None</SelectItem>
+          <SelectItem value="jina">Jina AI</SelectItem>
+          <SelectItem value="cohere">Cohere</SelectItem>
+        </SelectContent>
+      </Select>
+      <p class="text-[0.8rem] text-muted-foreground">
         Select an external provider to re-rank search results for better accuracy.
       </p>
     </div>
 
     <div
       v-if="store.rerankProvider !== 'none'"
-      class="form-group"
+      class="space-y-2 animate-in slide-in-from-top-2 fade-in duration-200"
     >
-      <label for="apiKey">API Key</label>
-      <input 
-        id="apiKey" 
-        v-model="store.rerankApiKey" 
-        type="password" 
-        class="input" 
-        placeholder="Enter API Key"
-      >
+      <label for="apiKey" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Rerank API Key</label>
+      <Input
+        id="apiKey"
+        v-model="store.rerankApiKey"
+        type="password"
+        placeholder="Enter Provider API Key"
+        class="font-mono"
+      />
     </div>
 
-    <button 
-      class="btn-primary" 
+    <Button 
       :disabled="store.isLoading" 
       @click="store.updateSettings"
+      class="w-full sm:w-auto"
     >
       <Loader2
         v-if="store.isLoading"
-        class="spin"
-        :size="18"
+        class="mr-2 h-4 w-4 animate-spin"
       />
       <Save
         v-else
-        :size="18"
+        class="mr-2 h-4 w-4"
       />
       <span>{{ store.isLoading ? 'Saving...' : 'Save Configuration' }}</span>
-    </button>
+    </Button>
   </div>
 </template>
-
-<style scoped>
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  max-width: 500px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.label-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.help-icon {
-  color: var(--color-text-muted);
-  cursor: help;
-}
-
-.input-range {
-  width: 100%;
-}
-
-.range-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-label {
-  font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--color-text-main);
-}
-
-.input {
-  padding: 0.75rem;
-  background: var(--color-void);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-main);
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  width: 100%;
-}
-
-.input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 1px var(--color-primary);
-}
-
-.select-wrapper {
-  position: relative;
-}
-
-.hint {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  background-color: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  align-self: flex-start;
-  transition: all 0.2s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
-}
-
-.btn-primary:disabled {
-  background-color: var(--color-border);
-  cursor: not-allowed;
-  color: var(--color-text-muted);
-}
-
-.msg {
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  font-size: 0.9rem;
-  border: 1px solid transparent;
-}
-
-.msg.error {
-  color: var(--color-danger);
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.msg.success {
-  color: var(--color-success);
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-</style>

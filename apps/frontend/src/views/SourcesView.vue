@@ -1,79 +1,39 @@
 <script setup lang="ts">
 import SourceForm from '../features/sources/SourceForm.vue'
 import SourceList from '../features/sources/SourceList.vue'
+import { Database } from 'lucide-vue-next'
 </script>
 
 <template>
-  <div class="view-container">
-    <div class="header">
-      <h1>Sources</h1>
-      <p class="subtitle">
-        Manage ingestion targets for your knowledge base.
-      </p>
+  <div class="space-y-8 w-full p-6 lg:p-10">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight text-foreground">Knowledge Base</h1>
+        <p class="text-muted-foreground mt-2 flex items-center gap-2 text-lg">
+          <Database class="w-5 h-5" />
+          Manage data ingestion sources and verify indexed content.
+        </p>
+      </div>
     </div>
 
-    <div class="grid">
-      <div class="card">
-        <h2>Add Source</h2>
-        <p class="card-desc">
-          Enter a URL to ingest documentation.
-        </p>
-        <SourceForm />
-      </div>
+    <!-- Hero Input Section -->
+    <div class="w-full">
+      <SourceForm />
+    </div>
 
-      <div class="card full-width">
-        <h2>Active Sources</h2>
+    <!-- Sources List Section -->
+    <div class="space-y-6 pt-6">
+      <div class="flex flex-col space-y-1.5 border-b border-border pb-4">
+        <h3 class="text-xl font-semibold leading-none tracking-tight text-foreground">Active Sources</h3>
+        <p class="text-sm text-muted-foreground">
+          Currently tracked data sources, their indexing status, and chunk counts.
+        </p>
+      </div>
+      
+      <div class="rounded-xl border border-border bg-card/30 backdrop-blur-sm p-6 shadow-sm">
         <SourceList />
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.view-container {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.header {
-  margin-bottom: 1rem;
-}
-
-h1 {
-  font-size: 2.5rem;
-  color: var(--color-text-main);
-}
-
-.subtitle {
-  color: var(--color-text-muted);
-  font-size: 1.1rem;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2rem;
-}
-
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-}
-
-.card-desc {
-  color: var(--color-text-muted);
-  margin-bottom: 1.5rem;
-  font-size: 0.9rem;
-}
-
-h2 {
-  font-size: 1.25rem;
-  margin-bottom: 0.5rem;
-  color: var(--color-text-main);
-}
-</style>

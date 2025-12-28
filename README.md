@@ -27,18 +27,18 @@
 Unlike cloud-based RAG solutions that introduce latency and privacy risks, Qurio runs locally to ingest your **handpicked** heterogeneous documentation (web crawls, PDFs, Markdown) and serves it directly to your IDE via the **Model Context Protocol (MCP)**. This ensures your AI writes better code faster using only the context you trust.
 
 ### Why Qurio?
-*   **Privacy First:** Your data stays on your machine (`localhost` only).
+*   **Privacy First:** Your data stays on your machine (`localhost`).
 *   **Precision:** Retrieves grounded "truth" to prevent AI hallucinations.
 *   **Speed:** Deploys in minutes with `docker-compose`.
 *   **Open Standards:** Built on MCP, Weaviate, and PostgreSQL.
 
 ## ✨ Key Features
 
-- **🌐 Universal Ingestion:** Crawl documentation sites (with `llms.txt` support) or upload files (PDF, DOCX, MD).
-- **🧠 Hybrid Search:** Combines BM25 keyword search with Vector embeddings (Gemini) for high-recall retrieval.
+- **🌐 Universal Ingestion:** Crawl documentation sites or upload files (PDF, DOCX, MD).
+- **🧠 Hybrid Search:** Configurable BM25 keyword search with Vector embeddings for high-recall retrieval.
 - **🎯 Configurable Reranking:** Integrate Jina AI or Cohere for precision tuning.
 - **🔌 Native MCP Support:** Exposes a standard JSON-RPC 2.0 endpoint for seamless integration with AI coding assistants.
-- **🕸️ Smart Crawling:** Recursive web crawling with depth control, regex exclusions, and sitemap support.
+- **🕸️ Smart Crawling:** Recursive web crawling with depth control, regex exclusions, respect robot.txt, sitemap and `llms.txt` `llms-full.txt` support.
 - **📄 OCR Pipeline:** Automatically extracts text from scanned PDFs and images via Docling.
 - **🖥️ Admin Dashboard:** Manage sources, view ingestion status, and debug queries via a clean Vue.js interface.
 

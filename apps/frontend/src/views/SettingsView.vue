@@ -1,48 +1,22 @@
 <script setup lang="ts">
 import Settings from '../features/settings/Settings.vue'
+import { Settings as SettingsIcon } from 'lucide-vue-next'
 </script>
 
 <template>
-  <div class="view-container">
-    <div class="header">
-      <h1>Settings</h1>
-      <p class="subtitle">
-        Configure AI providers and system preferences.
-      </p>
+  <div class="space-y-8 w-full p-6 lg:p-10 animate-in fade-in duration-500">
+    <div class="flex items-center justify-between pb-2">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight text-foreground">Settings</h1>
+        <p class="text-muted-foreground mt-2 flex items-center gap-2 text-lg">
+          <SettingsIcon class="w-5 h-5" />
+          Configure AI providers and system preferences.
+        </p>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="rounded-xl border border-border bg-card/50 backdrop-blur-sm p-6 shadow-sm">
       <Settings />
     </div>
   </div>
 </template>
-
-<style scoped>
-.view-container {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  max-width: 800px; /* Narrower for settings */
-}
-
-.header {
-  margin-bottom: 1rem;
-}
-
-h1 {
-  font-size: 2.5rem;
-  color: var(--color-text-main);
-}
-
-.subtitle {
-  color: var(--color-text-muted);
-  font-size: 1.1rem;
-}
-
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 2rem;
-}
-</style>
