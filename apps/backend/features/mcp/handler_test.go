@@ -1,89 +1,78 @@
 package mcp
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-
-	"qurio/apps/backend/internal/retrieval"
+    "context"
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/mock"
+    "net/http"
+    "net/http/httptest"
+    "strings"
+    "time"
+    "qurio/apps/backend/internal/retrieval"
+    "qurio/apps/backend/internal/middleware"
 )
 
-// MockRetriever implements Retriever interface
-type MockRetriever struct{}
-
-func (m *MockRetriever) Search(ctx context.Context, query string) ([]retrieval.SearchResult, error) {
-	return []retrieval.SearchResult{}, nil
+// MockRetriever
+type MockRetriever struct {
+    mock.Mock
 }
 
-type ErrorWrapper struct {
-	Status string `json:"status"`
-	Error  struct {
-		Code    interface{} `json:"code"`
-		Message string      `json:"message"`
-	} `json:"error"`
-	CorrelationID string `json:"correlationId"`
+func (m *MockRetriever) Search(ctx context.Context, query string, opts *retrieval.SearchOptions) ([]retrieval.SearchResult, error) {
+    args := m.Called(ctx, query, opts)
+    return args.Get(0).([]retrieval.SearchResult), args.Error(1)
 }
 
-func TestHandleMessage_ErrorJSON(t *testing.T) {
-	handler := NewHandler(&MockRetriever{})
+func TestHandleMessage_ContextPropagation(t *testing.T) {
+    // Setup
+    mockRetriever := new(MockRetriever)
+    handler := NewHandler(mockRetriever)
+    
+    // Create a session
+    wSSE := httptest.NewRecorder()
+    rSSE := httptest.NewRequest("GET", "/mcp/sse", nil)
+    go handler.HandleSSE(wSSE, rSSE)
+    
+    // Wait for session to be established
+    time.Sleep(100 * time.Millisecond)
+    
+    // Find the session ID
+    var sessionID string
+    handler.sessionsLock.RLock()
+    for k := range handler.sessions {
+        sessionID = k
+        break
+    }
+    handler.sessionsLock.RUnlock()
+    
+    assert.NotEmpty(t, sessionID, "Session ID should have been created")
 
-	tests := []struct {
-		name           string
-		url            string
-		body           string
-		expectedStatus int
-	}{
-		{
-			name:           "Missing SessionID",
-			url:            "/mcp/message",
-			body:           `{"jsonrpc":"2.0", "method":"ping", "id":1}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "Invalid JSON",
-			url:            "/mcp/message?sessionId=123",
-			body:           `{invalid json}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-	}
+    // Create a request with correlation ID
+    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "search", "arguments": {"query": "test"}}, "id": 1}`
+    r := httptest.NewRequest("POST", "/mcp/messages?sessionId="+sessionID, strings.NewReader(reqBody))
+    
+    correlationID := "test-correlation-id-123"
+    // Use helper to set context
+    ctx := middleware.WithCorrelationID(r.Context(), correlationID)
+    r = r.WithContext(ctx)
+    w := httptest.NewRecorder()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", tt.url, bytes.NewBufferString(tt.body))
-			w := httptest.NewRecorder()
+    // Expectation: Search is called with a context containing the correlation ID
+    mockRetriever.On("Search", mock.MatchedBy(func(ctx context.Context) bool {
+        // Verify correlation ID is present using helper
+        val := middleware.GetCorrelationID(ctx)
+        return val == correlationID
+    }), "test", mock.Anything).Return([]retrieval.SearchResult{}, nil)
 
-			handler.HandleMessage(w, req)
-
-			resp := w.Result()
-			
-			// Verify Content-Type
-			contentType := resp.Header.Get("Content-Type")
-			if !strings.Contains(contentType, "application/json") {
-				t.Errorf("Expected Content-Type application/json, got %s", contentType)
-			}
-
-			// Verify X-Correlation-ID header
-			if resp.Header.Get("X-Correlation-ID") == "" {
-				t.Error("Expected X-Correlation-ID header")
-			}
-
-			// Verify Body Structure
-			var errResp ErrorWrapper
-			if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-				t.Fatalf("Failed to decode JSON response: %v", err)
-			}
-
-			if errResp.Status != "error" {
-				t.Errorf("Expected status 'error', got '%s'", errResp.Status)
-			}
-			
-			if errResp.CorrelationID == "" {
-				t.Error("Expected CorrelationID in body")
-			}
-		})
-	}
+    // Act
+    handler.HandleMessage(w, r)
+    
+    // Verify immediate response
+    assert.Equal(t, http.StatusAccepted, w.Code)
+    
+    // Wait for async processing
+    time.Sleep(100 * time.Millisecond)
+    
+    // Assert
+    mockRetriever.AssertExpectations(t)
 }

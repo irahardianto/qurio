@@ -3,8 +3,10 @@ package job
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -19,7 +21,8 @@ func (m *MockRepo) List(ctx context.Context) ([]Job, error) {
 
 func TestHandler_List(t *testing.T) {
 	repo := &MockRepo{}
-	service := NewService(repo, nil) // Publisher not needed for List
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	service := NewService(repo, nil, logger) // Publisher not needed for List
 	handler := NewHandler(service)
 
 	req := httptest.NewRequest("GET", "/jobs", nil)

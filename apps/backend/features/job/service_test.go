@@ -2,6 +2,8 @@ package job
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 	"time"
 )
@@ -33,7 +35,8 @@ func TestRetry_Timeout(t *testing.T) {
 	repo := &MockRepoService{}
 	// Sleep longer than the 5s timeout
 	pub := &MockPublisher{sleep: 6 * time.Second}
-	service := NewService(repo, pub)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	service := NewService(repo, pub, logger)
 
 	// We can't wait 6 seconds in a unit test ideally, but to verify the logic we must.
 	// Or we could make the timeout configurable in Service, but the plan said "Add 5-second timeout".

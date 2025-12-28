@@ -1,3 +1,31 @@
+import sys
+from unittest.mock import MagicMock
+import types
+
+# Create a mock package for crawl4ai
+crawl4ai = types.ModuleType("crawl4ai")
+sys.modules["crawl4ai"] = crawl4ai
+
+# Mock submodules
+content_filter_strategy = types.ModuleType("crawl4ai.content_filter_strategy")
+sys.modules["crawl4ai.content_filter_strategy"] = content_filter_strategy
+crawl4ai.content_filter_strategy = content_filter_strategy
+
+markdown_generation_strategy = types.ModuleType("crawl4ai.markdown_generation_strategy")
+sys.modules["crawl4ai.markdown_generation_strategy"] = markdown_generation_strategy
+crawl4ai.markdown_generation_strategy = markdown_generation_strategy
+
+# Populate with mocks
+crawl4ai.AsyncWebCrawler = MagicMock()
+crawl4ai.CrawlerRunConfig = MagicMock()
+crawl4ai.CacheMode = MagicMock()
+crawl4ai.LLMConfig = MagicMock()
+
+content_filter_strategy.PruningContentFilter = MagicMock()
+content_filter_strategy.LLMContentFilter = MagicMock()
+
+markdown_generation_strategy.DefaultMarkdownGenerator = MagicMock()
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch, ANY
 from handlers.web import handle_web_task
@@ -10,6 +38,7 @@ async def test_handle_web_task_success():
     mock_result.success = True
     mock_result.markdown = "# Test Content"
     mock_result.url = "http://example.com"
+    mock_result.links = {'internal': []}
     
     # Mock crawler
     mock_crawler = AsyncMock()
@@ -23,7 +52,8 @@ async def test_handle_web_task_success():
     with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
         result = await handle_web_task("http://example.com")
         
-        assert isinstance(result, list)
+        # This assertion verifies the fix (it currently fails if returning dict)
+        assert isinstance(result, list), "Expected list, got something else"
         assert len(result) == 1
         assert result[0]["content"] == "# Test Content"
         assert result[0]["url"] == "http://example.com"
@@ -55,23 +85,12 @@ async def test_handle_file_task_success():
     mock_result = MagicMock()
     mock_result.document.export_to_markdown.return_value = "# File Content"
     
-    # Mock executor run
-    # Since we can't easily mock run_in_executor with patch directly on the loop if we don't control the loop creation
-    # We patch converter.convert to return the result, but since it's run in executor, we need to ensure the mock works.
-    
     with patch('handlers.file.converter') as mock_converter:
         mock_converter.convert.return_value = mock_result
-        
-        # We need to mock the executor execution or trust that run_in_executor calls the function
-        # A simpler way is to just call handle_file_task and see if it returns what we expect.
-        # But we need to make sure it doesn't actually try to read a file.
         
         result = await handle_file_task("/tmp/test.pdf")
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["content"] == "# File Content"
         assert result[0]["url"] == "/tmp/test.pdf"
-        # Verify convert was called (eventually)
-        # Note: Since it runs in a thread, verifying call args might be tricky if not waited properly, 
-        # but await handle_file_task waits for it.
         mock_converter.convert.assert_called_with("/tmp/test.pdf")

@@ -110,11 +110,11 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
             
             logger.info("crawl_completed", url=url, links_found=len(internal_links))
 
-            return {
+            return [{
                 "url": result.url,
                 "content": result.markdown,
                 "links": internal_links
-            }
+            }]
 
     except asyncio.TimeoutError:
         logger.error("crawl_timeout", url=url)

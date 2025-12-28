@@ -353,11 +353,12 @@ func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	// MCP Spec: Return 202 Accepted immediately
 	w.WriteHeader(http.StatusAccepted)
 	
+	// Create detached context to preserve values (correlationID) but ignore cancellation
+	bgCtx := context.WithoutCancel(r.Context())
+
 	// Process asynchronously
 	go func() {
-		// Create a new context with correlation ID if we had a way to propagate it easily
-		// For now just pass background context
-		resp := h.processRequest(context.Background(), req)
+		resp := h.processRequest(bgCtx, req)
 		if resp == nil {
 			// Notification, no response needed
 			return

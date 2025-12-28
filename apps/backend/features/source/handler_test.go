@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -67,6 +68,37 @@ func (m *MockRepo) Count(ctx context.Context) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockRepo) BulkCreatePages(ctx context.Context, pages []SourcePage) ([]string, error) {
+	args := m.Called(ctx, pages)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+func (m *MockRepo) UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error {
+	args := m.Called(ctx, sourceID, url, status, err)
+	return args.Error(0)
+}
+func (m *MockRepo) GetPages(ctx context.Context, sourceID string) ([]SourcePage, error) {
+	args := m.Called(ctx, sourceID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]SourcePage), args.Error(1)
+}
+func (m *MockRepo) DeletePages(ctx context.Context, sourceID string) error {
+	args := m.Called(ctx, sourceID)
+	return args.Error(0)
+}
+func (m *MockRepo) CountPendingPages(ctx context.Context, sourceID string) (int, error) {
+	args := m.Called(ctx, sourceID)
+	return args.Int(0), args.Error(1)
+}
+func (m *MockRepo) ResetStuckPages(ctx context.Context, timeout time.Duration) (int64, error) {
+	args := m.Called(ctx, timeout)
+	return int64(args.Int(0)), args.Error(1)
+}
+
 type MockPub struct {
 	mock.Mock
 }
@@ -115,6 +147,8 @@ func TestCreate_FullPayload(t *testing.T) {
 			src.Exclusions[0] == "/blog"
 	})).Return(nil)
 	
+    repo.On("BulkCreatePages", mock.Anything, mock.Anything).Return([]string{}, nil)
+
 	settingsMock.On("Get", mock.Anything).Return(&settings.Settings{}, nil)
 
 	// Verify "max_depth" key in published payload

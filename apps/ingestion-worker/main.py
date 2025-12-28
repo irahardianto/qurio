@@ -58,9 +58,7 @@ async def process_message(message):
             url = data.get('url')
             exclusions = data.get('exclusions', [])
             api_key = data.get('gemini_api_key')
-            # Returns dict: {"url": "...", "content": "...", "links": [...]}
-            result = await handle_web_task(url, exclusions=exclusions, api_key=api_key)
-            results_list = [result]
+            results_list = await handle_web_task(url, exclusions=exclusions, api_key=api_key)
         
         elif task_type == 'file':
             file_path = data.get('path')

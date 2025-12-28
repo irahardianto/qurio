@@ -44,12 +44,20 @@ func (m *MockJobRepo) Count(ctx context.Context) (int, error) { return 0, nil }
 
 type MockSourceFetcher struct{}
 func (m *MockSourceFetcher) GetSourceDetails(ctx context.Context, id string) (string, string, error) { return "web", "http://example.com", nil }
+func (m *MockSourceFetcher) GetSourceConfig(ctx context.Context, id string) (int, []string, string, error) { return 0, nil, "", nil }
 
+type MockPageManager struct{}
+func (m *MockPageManager) BulkCreatePages(ctx context.Context, pages []PageDTO) ([]string, error) { return nil, nil }
+func (m *MockPageManager) UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error { return nil }
+func (m *MockPageManager) CountPendingPages(ctx context.Context, sourceID string) (int, error) { return 0, nil }
+
+type MockPublisher struct{}
+func (m *MockPublisher) Publish(topic string, body []byte) error { return nil }
 
 func TestResultConsumer_HandleMessage_CorrelationID(t *testing.T) {
 	embedder := &MockEmbedder{}
 	store := &MockStore{}
-	consumer := NewResultConsumer(embedder, store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{})
+	consumer := NewResultConsumer(embedder, store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})
 
 	expectedID := "test-correlation-id"
 	payload := map[string]string{

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"qurio/apps/backend/internal/worker"
 	"qurio/apps/backend/internal/settings"
@@ -41,6 +42,7 @@ type Repository interface {
 	GetPages(ctx context.Context, sourceID string) ([]SourcePage, error)
 	DeletePages(ctx context.Context, sourceID string) error
 	CountPendingPages(ctx context.Context, sourceID string) (int, error)
+	ResetStuckPages(ctx context.Context, timeout time.Duration) (int64, error)
 	
 	// Sources
 
@@ -280,4 +282,16 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 
 func (s *Service) GetPages(ctx context.Context, id string) ([]SourcePage, error) {
 	return s.repo.GetPages(ctx, id)
+}
+
+func (s *Service) ResetStuckPages(ctx context.Context) error {
+	count, err := s.repo.ResetStuckPages(ctx, 5*time.Minute)
+	if err != nil {
+		slog.Error("failed to reset stuck pages", "error", err)
+		return err
+	}
+	if count > 0 {
+		slog.Info("reset stuck pages", "count", count)
+	}
+	return nil
 }

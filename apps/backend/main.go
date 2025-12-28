@@ -179,7 +179,7 @@ func main() {
 
 	// Feature: Job
 	jobRepo := job.NewPostgresRepo(db)
-	jobService := job.NewService(jobRepo, nsqProducer)
+	jobService := job.NewService(jobRepo, nsqProducer, logger)
 	jobHandler := job.NewHandler(jobService)
 
 	// Feature: Stats
@@ -264,6 +264,20 @@ func main() {
 			slog.Info("NSQ Result Consumer connected", "concurrency", cfg.IngestionConcurrency)
 		}
 	}
+
+	// Background Janitor
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := sourceService.ResetStuckPages(context.Background()); err != nil {
+					slog.Error("failed to reset stuck pages", "error", err)
+				}
+			}
+		}
+	}()
 
 	// 6. Start Server
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,7 @@ The Qurio MVP is now functionally complete.
   - API standardized (JSON envelopes, correlation IDs).
   - Structured logging (slog/structlog) implemented end-to-end.
   - Resilience features (Timeouts, DLQ/Retry) verified.
+  - Known Issue: Background janitor for stuck jobs pending implementation.
 
 **Latest Version:** v0.2.0-MVP (as per Sidebar)
 **Documentation:** Updated README.md with setup and usage instructions.

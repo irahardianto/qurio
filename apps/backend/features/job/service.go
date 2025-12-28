@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -11,12 +12,13 @@ type EventPublisher interface {
 }
 
 type Service struct {
-	repo Repository
-	pub  EventPublisher
+	repo   Repository
+	pub    EventPublisher
+	logger *slog.Logger
 }
 
-func NewService(repo Repository, pub EventPublisher) *Service {
-	return &Service{repo: repo, pub: pub}
+func NewService(repo Repository, pub EventPublisher, logger *slog.Logger) *Service {
+	return &Service{repo: repo, pub: pub, logger: logger}
 }
 
 func (s *Service) List(ctx context.Context) ([]Job, error) {
@@ -24,9 +26,12 @@ func (s *Service) List(ctx context.Context) ([]Job, error) {
 }
 
 func (s *Service) Retry(ctx context.Context, id string) error {
+	s.logger.Info("job retry started", "job_id", id)
+
 	// 1. Get Job
 	job, err := s.repo.Get(ctx, id)
 	if err != nil {
+		s.logger.Error("failed to get job", "job_id", id, "error", err)
 		return err
 	}
 
@@ -39,16 +44,24 @@ func (s *Service) Retry(ctx context.Context, id string) error {
 	select {
 	case err := <-done:
 		if err != nil {
+			s.logger.Error("failed to publish job", "job_id", id, "error", err)
 			return err
 		}
 	case <-time.After(5 * time.Second):
+		s.logger.Error("timeout waiting for NSQ publish", "job_id", id)
 		return fmt.Errorf("timeout waiting for NSQ publish")
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 
 	// 3. Delete Job
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		s.logger.Error("failed to delete job", "job_id", id, "error", err)
+		return err
+	}
+
+	s.logger.Info("job retry successful", "job_id", id)
+	return nil
 }
 
 func (s *Service) Count(ctx context.Context) (int, error) {

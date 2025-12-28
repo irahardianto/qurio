@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/settings"
@@ -33,6 +34,17 @@ type TestRepo struct { Repository }
 func (m *TestRepo) ExistsByHash(ctx context.Context, hash string) (bool, error) { return false, nil }
 func (m *TestRepo) Save(ctx context.Context, src *Source) error { return nil }
 func (m *TestRepo) Count(ctx context.Context) (int, error) { return 0, nil }
+func (m *TestRepo) ResetStuckPages(ctx context.Context, timeout time.Duration) (int64, error) { return 1, nil }
+func (m *TestRepo) BulkCreatePages(ctx context.Context, pages []SourcePage) ([]string, error) { return nil, nil }
+func (m *TestRepo) UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error { return nil }
+func (m *TestRepo) GetPages(ctx context.Context, sourceID string) ([]SourcePage, error) { return nil, nil }
+func (m *TestRepo) DeletePages(ctx context.Context, sourceID string) error { return nil }
+func (m *TestRepo) CountPendingPages(ctx context.Context, sourceID string) (int, error) { return 0, nil }
+func (m *TestRepo) Get(ctx context.Context, id string) (*Source, error) { return nil, nil }
+func (m *TestRepo) List(ctx context.Context) ([]Source, error) { return nil, nil }
+func (m *TestRepo) UpdateStatus(ctx context.Context, id, status string) error { return nil }
+func (m *TestRepo) UpdateBodyHash(ctx context.Context, id, hash string) error { return nil }
+func (m *TestRepo) SoftDelete(ctx context.Context, id string) error { return nil }
 
 type TestSettings struct { SettingsService }
 func (m *TestSettings) Get(ctx context.Context) (*settings.Settings, error) { return nil, nil }
@@ -65,5 +77,14 @@ func TestCreate_PropagatesCorrelationID(t *testing.T) {
 
 	if id, ok := payload["correlation_id"].(string); !ok || id != expectedID {
 		t.Errorf("Expected correlation_id %s, got %v", expectedID, payload["correlation_id"])
+	}
+}
+
+func TestService_ResetStuckPages(t *testing.T) {
+	repo := &TestRepo{}
+	svc := NewService(repo, nil, nil, nil)
+
+	if err := svc.ResetStuckPages(context.Background()); err != nil {
+		t.Errorf("ResetStuckPages failed: %v", err)
 	}
 }
