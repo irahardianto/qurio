@@ -22,3 +22,11 @@ func (a *WeaviateClientAdapter) ClassExists(ctx context.Context, className strin
 func (a *WeaviateClientAdapter) CreateClass(ctx context.Context, class *models.Class) error {
 	return a.Client.Schema().ClassCreator().WithClass(class).Do(ctx)
 }
+
+func (a *WeaviateClientAdapter) GetClass(ctx context.Context, className string) (*models.Class, error) {
+	return a.Client.Schema().ClassGetter().WithClassName(className).Do(ctx)
+}
+
+func (a *WeaviateClientAdapter) AddProperty(ctx context.Context, className string, property *models.Property) error {
+	return a.Client.Schema().PropertyCreator().WithClassName(className).WithProperty(property).Do(ctx)
+}

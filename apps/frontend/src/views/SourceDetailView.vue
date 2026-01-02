@@ -207,15 +207,21 @@ const copyToClipboard = (text: string) => {
                class="flex flex-col gap-1 p-3 text-left border-b border-border/50 hover:bg-muted/50 transition-colors focus:outline-none"
                :class="{ 'bg-primary/10 border-l-2 border-l-primary': selectedChunk === chunk, 'border-l-2 border-l-transparent': selectedChunk !== chunk }"
              >
-               <div class="flex items-center justify-between">
+               <div class="flex items-center justify-between mb-1">
                  <span class="font-mono text-xs text-muted-foreground flex items-center gap-1">
                    <Hash class="h-3 w-3" /> {{ chunk.ChunkIndex }}
                  </span>
-                 <span class="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
-                   {{ chunk.Content?.length || 0 }} chars
-                 </span>
+                 <div class="flex items-center gap-1">
+                    <Badge v-if="chunk.Type" variant="outline" class="text-[9px] px-1 py-0 h-4 uppercase">{{ chunk.Type }}</Badge>
+                    <span class="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
+                      {{ chunk.Content?.length || 0 }}
+                    </span>
+                 </div>
                </div>
-               <div class="text-xs font-medium truncate opacity-90">
+               <div v-if="chunk.Title" class="text-xs font-semibold truncate text-foreground/80 mb-0.5">
+                 {{ chunk.Title }}
+               </div>
+               <div class="text-xs font-medium truncate opacity-70">
                  {{ chunk.Content?.substring(0, 50) }}...
                </div>
              </button>
@@ -226,9 +232,22 @@ const copyToClipboard = (text: string) => {
              <div v-if="selectedChunk" class="space-y-6">
                <div class="flex items-start justify-between border-b border-border/50 pb-4">
                  <div class="space-y-1">
-                   <h4 class="text-lg font-bold font-mono text-primary flex items-center gap-2">
-                     Chunk #{{ selectedChunk.ChunkIndex }}
-                   </h4>
+                   <div class="flex items-center gap-2">
+                     <h4 class="text-lg font-bold font-mono text-primary flex items-center gap-2">
+                       Chunk #{{ selectedChunk.ChunkIndex }}
+                     </h4>
+                     <Badge v-if="selectedChunk.Type" variant="secondary" class="font-mono text-xs uppercase">
+                        {{ selectedChunk.Type }}
+                     </Badge>
+                     <Badge v-if="selectedChunk.Language" variant="outline" class="font-mono text-xs">
+                        {{ selectedChunk.Language }}
+                     </Badge>
+                   </div>
+                   
+                   <div v-if="selectedChunk.Title" class="text-base font-semibold text-foreground/90">
+                      {{ selectedChunk.Title }}
+                   </div>
+
                    <div class="flex items-center gap-2 text-sm text-muted-foreground">
                      <FileText class="h-4 w-4" />
                      <span class="truncate max-w-[300px]" :title="selectedChunk.SourceURL">
@@ -252,17 +271,6 @@ const copyToClipboard = (text: string) => {
                    <pre class="whitespace-pre-wrap font-mono text-sm leading-relaxed bg-background/50 p-4 rounded-lg border border-border text-foreground/90 overflow-x-auto">{{ selectedChunk.Content }}</pre>
                  </div>
                </div>
-
-               <!-- Placeholder for vector data or other metadata -->
-               <!-- 
-               <div class="space-y-2 pt-4">
-                 <label class="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Vector Data</label>
-                 <div class="h-2 bg-secondary rounded overflow-hidden">
-                   <div class="h-full bg-primary/50 w-2/3"></div>
-                 </div>
-                 <p class="text-xs text-muted-foreground">Embedding vector stored (768 dimensions)</p>
-               </div> 
-               -->
              </div>
              
              <div v-else class="h-full flex flex-col items-center justify-center text-muted-foreground">

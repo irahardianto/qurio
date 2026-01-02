@@ -14,6 +14,7 @@ import (
 
 type Retriever interface {
 	Search(ctx context.Context, query string, opts *retrieval.SearchOptions) ([]retrieval.SearchResult, error)
+	GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error)
 }
 
 type Handler struct {
@@ -43,9 +44,14 @@ type CallParams struct {
 }
 
 type SearchArgs struct {
-	Query string   `json:"query"`
-	Alpha *float32 `json:"alpha,omitempty"`
-	Limit *int     `json:"limit,omitempty"`
+	Query   string                 `json:"query"`
+	Alpha   *float32               `json:"alpha,omitempty"`
+	Limit   *int                   `json:"limit,omitempty"`
+	Filters map[string]interface{} `json:"filters,omitempty"`
+}
+
+type FetchPageArgs struct {
+	URL string `json:"url"`
 }
 
 type Tool struct {
@@ -116,7 +122,7 @@ func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONR
 			Result: ListToolsResult{
 				Tools: []Tool{
 					{
-						Name:        "search",
+						Name:        "qurio_search",
 						Description: `Search documentation and knowledge base.
 
 ARGUMENT GUIDE:
@@ -130,7 +136,11 @@ ARGUMENT GUIDE:
 [Limit: Result Count]
 - Default: 10
 - Recommended: 5-15 (Prevent context bloat)
-- Max: 50`,
+- Max: 50
+
+[Filters: Metadata Filtering]
+- type: Filter by content type (e.g., "code", "prose", "api", "config").
+- language: Filter by language (e.g., "go", "python", "json").`,
 						InputSchema: map[string]interface{}{
 							"type": "object",
 							"properties": map[string]interface{}{
@@ -150,8 +160,26 @@ ARGUMENT GUIDE:
 									"minimum":     1,
 									"maximum":     50,
 								},
+								"filters": map[string]interface{}{
+									"type":        "object",
+									"description": "Metadata filters (e.g. type='code', language='go')",
+								},
 							},
 							"required": []string{"query"},
+						},
+					},
+					{
+						Name:        "qurio_fetch_page",
+						Description: `Retrieve all content chunks for a specific URL from the knowledge base. Useful for getting full context of a page found via search.`, 
+						InputSchema: map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"url": map[string]string{
+									"type":        "string",
+									"description": "The URL to fetch content for",
+								},
+							},
+							"required": []string{"url"},
 						},
 					},
 				},
@@ -167,7 +195,16 @@ ARGUMENT GUIDE:
 			return &resp
 		}
 
-		if params.Name == "search" {
+		if params.Name == "qurio_search" || params.Name == "search" { // Backward compatibility for now? Or strict? Plan says "Rename". Strict is better to verify change.
+			// Actually, let's stick to strict renaming as per plan.
+			if params.Name == "search" {
+				// Optional: Support alias or reject. Plan says "Rename".
+				// I will treat "search" as not found or alias?
+				// To be safe and strict: "Rename" implies old name is gone.
+			}
+		}
+
+		if params.Name == "qurio_search" {
 			var args SearchArgs
 			if err := json.Unmarshal(params.Arguments, &args); err != nil {
 				slog.Warn("invalid search arguments", "error", err)
@@ -176,8 +213,9 @@ ARGUMENT GUIDE:
 			}
 
 			opts := &retrieval.SearchOptions{
-				Alpha: args.Alpha,
-				Limit: args.Limit,
+				Alpha:   args.Alpha,
+				Limit:   args.Limit,
+				Filters: args.Filters,
 			}
 			results, err := h.retriever.Search(ctx, args.Query, opts)
 			if err != nil {
@@ -197,16 +235,86 @@ ARGUMENT GUIDE:
 				textResult = "No results found."
 			} else {
 				for i, res := range results {
-					textResult += fmt.Sprintf("Result %d (Score: %.2f):\n%s\n", i+1, res.Score, res.Content)
-					if len(res.Metadata) > 0 {
-						meta, _ := json.Marshal(res.Metadata)
-						textResult += fmt.Sprintf("Metadata: %s\n", string(meta))
+					textResult += fmt.Sprintf("Result %d (Score: %.2f):\n", i+1, res.Score)
+					if res.Title != "" {
+						textResult += fmt.Sprintf("Title: %s\n", res.Title)
 					}
+					// Extract Type and Language from Metadata if present
+					if typeVal, ok := res.Metadata["type"].(string); ok && typeVal != "" {
+						textResult += fmt.Sprintf("Type: %s\n", typeVal)
+					}
+					if langVal, ok := res.Metadata["language"].(string); ok && langVal != "" {
+						textResult += fmt.Sprintf("Language: %s\n", langVal)
+					}
+					
+					textResult += fmt.Sprintf("Content:\n%s\n", res.Content)
+					
+					// Optional: Show other metadata
+					// if len(res.Metadata) > 0 {
+					// 	meta, _ := json.Marshal(res.Metadata)
+					// 	textResult += fmt.Sprintf("Metadata: %s\n", string(meta))
+					// }
 					textResult += "\n---\n"
 				}
 			}
 
-			slog.Info("tool execution completed", "tool", "search", "result_count", len(results))
+			slog.Info("tool execution completed", "tool", "qurio_search", "result_count", len(results))
+
+			return &JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: ToolResult{
+					Content: []ToolContent{
+						{Type: "text", Text: textResult},
+					},
+				},
+			}
+		}
+
+		if params.Name == "qurio_fetch_page" {
+			var args FetchPageArgs
+			if err := json.Unmarshal(params.Arguments, &args); err != nil {
+				slog.Warn("invalid fetch_page arguments", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
+				return &resp
+			}
+
+			results, err := h.retriever.GetChunksByURL(ctx, args.URL)
+			if err != nil {
+				slog.Error("fetch_page failed", "error", err)
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{{Type: "text", Text: "Error: " + err.Error()}},
+						IsError: true,
+					},
+				}
+			}
+
+			var textResult string
+			if len(results) == 0 {
+				textResult = "No content found for URL."
+			} else {
+				title := ""
+				if len(results) > 0 {
+					title = results[0].Title
+				}
+				textResult = fmt.Sprintf("Page: %s\nURL: %s\n\n", title, args.URL)
+				for _, res := range results {
+					// Check Type in Metadata since SearchResult doesn't have Type field (it's in Metadata)
+					typeVal, _ := res.Metadata["type"].(string)
+					langVal, _ := res.Metadata["language"].(string)
+					
+					if typeVal == "code" {
+						textResult += fmt.Sprintf("[Code Block: %s]\n%s\n\n", langVal, res.Content)
+					} else {
+						textResult += fmt.Sprintf("%s\n\n", res.Content)
+					}
+				}
+			}
+
+			slog.Info("tool execution completed", "tool", "qurio_fetch_page", "chunk_count", len(results))
 
 			return &JSONRPCResponse{
 				JSONRPC: "2.0",

@@ -64,7 +64,9 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
 
     config = CrawlerRunConfig(
         cache_mode=CacheMode.ENABLED,
-        excluded_tags=['nav', 'footer', 'aside', 'header'],
+        # Remove excluded_tags to ensure links in nav/sidebar are discovered.
+        # The LLMContentFilter will handle removing them from the content.
+        # excluded_tags=['nav', 'footer', 'aside', 'header'], 
         exclude_external_links=True,
         markdown_generator=md_generator,
         check_robots_txt=True 
@@ -107,11 +109,19 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
 
             # De-duplicate
             internal_links = list(set(internal_links))
+
+            # Extract title (simplistic regex fallback if not in result)
+            title = ""
+            if result.markdown:
+                match = re.search(r'^#\s+(.+)$', result.markdown, re.MULTILINE)
+                if match:
+                    title = match.group(1).strip()
             
-            logger.info("crawl_completed", url=url, links_found=len(internal_links))
+            logger.info("crawl_completed", url=url, links_found=len(internal_links), title=title)
 
             return [{
                 "url": result.url,
+                "title": title,
                 "content": result.markdown,
                 "links": internal_links
             }]

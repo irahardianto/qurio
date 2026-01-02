@@ -1,25 +1,28 @@
-# Project Overview
+# Monarch - Project Overview
 
-## Mission
-**Qurio** is an autonomous "Knowledge Engine" that ingests, processes, and serves high-quality technical knowledge. It combines a robust ingestion pipeline with a precise RAG (Retrieval-Augmented Generation) system, designed to power AI agents and technical assistants.
+**Monarch** is an open-source, AI-native task management platform designed to prevent "architectural drift" in agentic workflows. It acts as an **Execution Supervisor**, utilizing the Supervisor Pattern to validate agent work against defined Non-Functional Requirement (NFR) Gates.
 
-## Core Capabilities
-- **Universal Ingestion**: Crawls websites (with Javascript support) and processes documents (PDF, Markdown).
-- **Smart Chunking**: Uses LLM-powered content filtering and semantic chunking strategies.
-- **Hybrid Search**: Combines Keyword (BM25) and Vector (Embeddings) search with dynamic alpha tuning.
-- **MCP Integration**: Exposes knowledge via the Model Context Protocol for seamless agent integration.
-- **Resilient Architecture**: Features a persistent Dead Letter Queue (DLQ) and retry mechanisms for ingestion reliability.
+## Core Value Proposition
+Monarch wraps task completion in strict, executable gates. It runs locally alongside the developer's code and uses **Docker sidecars** to validate code (Security, Performance, Testing) before allowing task closure.
 
-## Current State (v0.2.0-MVP)
-- **Backend**: Fully functional Go service with NSQ messaging and Weaviate integration.
-- **Worker**: Python-based distributed worker using `crawl4ai` and `docling`.
-- **Frontend**: A polished, developer-centric "Sage" interface (Vue 3) featuring:
-    - **Void Black** / **Cognitive Blue** aesthetic.
-    - **Full-width responsive layouts** with glassmorphic cards.
-    - **Master-Detail views** for inspecting ingested content.
-    - **Drag-and-drop** file uploads and real-time job monitoring.
+## Key Features
+*   **Supervisor Pattern:** Acts as a bridge between humans (Requirements) and Agents (Execution).
+*   **NFR Gates:** Ephemeral Docker containers validate code (Tier A/B/C gates).
+*   **Project Registration:** Auto-detects project stack (Go, Node, Python) and configures gates.
+*   **Protocol Translation:** Converts raw tool logs into agent-readable "Unified Error Objects".
+*   **Circuit Breaking:** Detects and blocks infinite loops in agent behavior (default 5 attempts).
+*   **MCP Integration:** Exposes "Planner" and "Builder" toolsets via Model Context Protocol.
+*   **LLM Evaluation:** AI-powered code review gates using Gemini Pro.
 
-## Key Links
-- **API Documentation**: See `api_endpoints.md`
-- **Technical Stack**: See `tech_stack.md`
-- **Architecture**: See `implementation_details.md`
+## Architecture
+*   **Type:** Local-first, self-hosted platform.
+*   **Components:** Single Go binary (API, MCP Server, State) located in `apps/backend`, PostgreSQL + pgvector, Docker SDK for orchestration.
+*   **Interface:** Vue.js + Shadcn Dashboard located in `apps/frontend`.
+
+## Current Status (2026-01-02)
+*   Backend Core implemented (DB, Runner, API, Gates, Project).
+*   **Execution Engine:** Universal Docker Executor and Tool Output Parsers (Go Test, ESLint) implemented.
+*   **LLM Eval Engine:** Implemented with Gemini Pro integration, Snapshot/Diff analysis.
+*   **MCP Server:** Implemented with Planner (search/list) and Builder (claim/submit) tools using SSE transport.
+*   Frontend pending.
+*   **Planning:** Epic 5 (LLM Eval Engine) implementation complete.

@@ -9,6 +9,7 @@ import (
     "net/http/httptest"
     "strings"
     "time"
+    "encoding/json"
     "qurio/apps/backend/internal/retrieval"
     "qurio/apps/backend/internal/middleware"
 )
@@ -21,6 +22,38 @@ type MockRetriever struct {
 func (m *MockRetriever) Search(ctx context.Context, query string, opts *retrieval.SearchOptions) ([]retrieval.SearchResult, error) {
     args := m.Called(ctx, query, opts)
     return args.Get(0).([]retrieval.SearchResult), args.Error(1)
+}
+
+func (m *MockRetriever) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {
+    args := m.Called(ctx, url)
+    return args.Get(0).([]retrieval.SearchResult), args.Error(1)
+}
+
+func TestToolsList_ReturnsQurioTools(t *testing.T) {
+    mockRetriever := new(MockRetriever)
+    handler := NewHandler(mockRetriever)
+
+    reqBody := `{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}`
+    // Note: processRequest is internal, but we can test ServeHTTP or simulate it. 
+    // Testing HandleMessage is tricky due to async SSE.
+    // However, the test file has access to internal methods if it's in package mcp (it is).
+    // So we can call processRequest directly if we expose it or use ServeHTTP.
+    
+    // Using processRequest directly (since it's in same package)
+    var req JSONRPCRequest
+    json.Unmarshal([]byte(reqBody), &req)
+    resp := handler.processRequest(context.Background(), req)
+    
+    assert.NotNil(t, resp.Result)
+    listResult := resp.Result.(ListToolsResult)
+    
+    toolNames := make(map[string]bool)
+    for _, tool := range listResult.Tools {
+        toolNames[tool.Name] = true
+    }
+    
+    assert.True(t, toolNames["qurio_search"])
+    assert.True(t, toolNames["qurio_fetch_page"])
 }
 
 func TestHandleMessage_ContextPropagation(t *testing.T) {
@@ -48,7 +81,8 @@ func TestHandleMessage_ContextPropagation(t *testing.T) {
     assert.NotEmpty(t, sessionID, "Session ID should have been created")
 
     // Create a request with correlation ID
-    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "search", "arguments": {"query": "test"}}, "id": 1}`
+    // Updated tool name to "qurio_search"
+    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "qurio_search", "arguments": {"query": "test"}}, "id": 1}`
     r := httptest.NewRequest("POST", "/mcp/messages?sessionId="+sessionID, strings.NewReader(reqBody))
     
     correlationID := "test-correlation-id-123"
@@ -74,5 +108,29 @@ func TestHandleMessage_ContextPropagation(t *testing.T) {
     time.Sleep(100 * time.Millisecond)
     
     // Assert
+    mockRetriever.AssertExpectations(t)
+}
+
+func TestToolsCall_FetchPage(t *testing.T) {
+    mockRetriever := new(MockRetriever)
+    handler := NewHandler(mockRetriever)
+
+    url := "http://example.com"
+    mockRetriever.On("GetChunksByURL", mock.Anything, url).Return([]retrieval.SearchResult{
+        {Content: "Chunk 1", Metadata: map[string]interface{}{"url": url}},
+        {Content: "Chunk 2", Metadata: map[string]interface{}{"url": url}},
+    }, nil)
+
+    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "qurio_fetch_page", "arguments": {"url": "http://example.com"}}, "id": 1}`
+    
+    var req JSONRPCRequest
+    json.Unmarshal([]byte(reqBody), &req)
+    
+    resp := handler.processRequest(context.Background(), req)
+    
+    assert.Nil(t, resp.Error)
+    result := resp.Result.(ToolResult)
+    assert.Contains(t, result.Content[0].Text, "Chunk 1")
+    assert.Contains(t, result.Content[0].Text, "Chunk 2")
     mockRetriever.AssertExpectations(t)
 }

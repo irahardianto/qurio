@@ -10,6 +10,9 @@ type Chunk struct {
 	SourceURL  string
 	SourceID   string
 	ChunkIndex int
+	Type       string
+	Language   string
+	Title      string
 }
 
 type Embedder interface {

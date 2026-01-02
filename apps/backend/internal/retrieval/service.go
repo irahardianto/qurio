@@ -9,12 +9,14 @@ import (
 type SearchResult struct {
 	Content  string                 `json:"content"`
 	Score    float32                `json:"score"`
+	Title    string                 `json:"title,omitempty"`
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
 type SearchOptions struct {
-	Alpha *float32
-	Limit *int
+	Alpha   *float32
+	Limit   *int
+	Filters map[string]interface{}
 }
 
 type Embedder interface {
@@ -22,7 +24,8 @@ type Embedder interface {
 }
 
 type VectorStore interface {
-	Search(ctx context.Context, query string, vector []float32, alpha float32, limit int) ([]SearchResult, error)
+	Search(ctx context.Context, query string, vector []float32, alpha float32, limit int, filters map[string]interface{}) ([]SearchResult, error)
+	GetChunksByURL(ctx context.Context, url string) ([]SearchResult, error)
 }
 
 type Reranker interface {
@@ -65,13 +68,17 @@ func (s *Service) Search(ctx context.Context, query string, opts *SearchOptions)
 
 	// Resolve params
 	alpha := cfg.SearchAlpha
-	if opts != nil && opts.Alpha != nil {
-		alpha = *opts.Alpha
-	}
-
 	limit := cfg.SearchTopK
-	if opts != nil && opts.Limit != nil {
-		limit = *opts.Limit
+	var filters map[string]interface{}
+
+	if opts != nil {
+		if opts.Alpha != nil {
+			alpha = *opts.Alpha
+		}
+		if opts.Limit != nil {
+			limit = *opts.Limit
+		}
+		filters = opts.Filters
 	}
 
 	// 1. Embed Query
@@ -81,9 +88,16 @@ func (s *Service) Search(ctx context.Context, query string, opts *SearchOptions)
 	}
 
 	// 2. Hybrid Search (BM25 + Vector)
-	docs, err := s.store.Search(ctx, query, vec, alpha, limit)
+	docs, err := s.store.Search(ctx, query, vec, alpha, limit, filters)
 	if err != nil {
 		return nil, err
+	}
+
+	// Populate top-level Title from metadata for convenience
+	for i := range docs {
+		if title, ok := docs[i].Metadata["title"].(string); ok {
+			docs[i].Title = title
+		}
 	}
 
 	// 3. Rerank (if configured)
@@ -111,4 +125,18 @@ func (s *Service) Search(ctx context.Context, query string, opts *SearchOptions)
 
 	finalDocs = docs
 	return docs, nil
+}
+
+func (s *Service) GetChunksByURL(ctx context.Context, url string) ([]SearchResult, error) {
+	results, err := s.store.GetChunksByURL(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	// Populate top-level Title from metadata for convenience
+	for i := range results {
+		if title, ok := results[i].Metadata["title"].(string); ok {
+			results[i].Title = title
+		}
+	}
+	return results, nil
 }

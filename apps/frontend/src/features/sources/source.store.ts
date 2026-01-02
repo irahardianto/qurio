@@ -1,6 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+export interface Chunk {
+  Content: string
+  Vector?: number[]
+  SourceURL: string
+  SourceID: string
+  ChunkIndex: number
+  Type: string
+  Language: string
+  Title: string
+}
+
 export interface Source {
   id: string
   name: string
@@ -10,6 +21,8 @@ export interface Source {
   lastSyncedAt?: string
   max_depth?: number
   exclusions?: string[]
+  chunks?: Chunk[]
+  total_chunks?: number
 }
 
 export interface SourcePage {
@@ -151,7 +164,7 @@ export const useSourceStore = defineStore('sources', () => {
       const res = await fetch(`/api/sources/${id}`)
       if (!res.ok) throw new Error(`Failed to fetch source details: ${res.statusText}`)
       const json = await res.json()
-      return json.data
+      return json.data as Source
     } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
       return null

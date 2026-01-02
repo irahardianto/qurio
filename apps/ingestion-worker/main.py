@@ -69,6 +69,7 @@ async def process_message(message):
                 result_payload = {
                     "source_id": source_id,
                     "content": res['content'],
+                    "title": res.get('title', ''),
                     "url": res['url'],
                     "status": "success",
                     "links": res.get('links', []),

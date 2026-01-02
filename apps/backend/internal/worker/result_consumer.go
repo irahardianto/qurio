@@ -64,6 +64,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	var payload struct {
 		SourceID        string          `json:"source_id"`
 		Content         string          `json:"content"`
+		Title           string          `json:"title"`
 		URL             string          `json:"url"`
 		Status          string          `json:"status,omitempty"` // "success" or "failed"
 		Error           string          `json:"error,omitempty"`
@@ -136,24 +137,37 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	// 2. Chunk, Embed, Store
 	if payload.Content != "" {
-		chunks := text.Chunk(payload.Content, 512, 50)
+		chunks := text.ChunkMarkdown(payload.Content, 512, 50)
 		if len(chunks) > 0 {
 			for i, c := range chunks {
 				err := func() error {
 					embedCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 					defer cancel()
 
-					vector, err := h.embedder.Embed(embedCtx, c)
+					// Contextual Embedding (FR-06)
+					// Embedding Format:
+					// Title: <Page Title>
+					// URL: <Page URL>
+					// Type: <Content Type>
+					// ---
+					// <Raw Chunk Content>
+					contextualString := fmt.Sprintf("Title: %s\nURL: %s\nType: %s\n---\n%s", 
+						payload.Title, payload.URL, string(c.Type), c.Content)
+
+					vector, err := h.embedder.Embed(embedCtx, contextualString)
 					if err != nil {
 						return err
 					}
 
 					chunk := Chunk{
-						Content:    c,
+						Content:    c.Content, // Store original content (FR-08)
 						Vector:     vector,
 						SourceID:   payload.SourceID,
 						SourceURL:  payload.URL,
 						ChunkIndex: i,
+						Type:       string(c.Type),
+						Language:   c.Language,
+						Title:      payload.Title,
 					}
 
 					return h.store.StoreChunk(embedCtx, chunk)
@@ -190,25 +204,29 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 				if err != nil || linkU.Host != host {
 					continue
 				}
+
+				// Normalize URL: Strip Fragment
+				linkU.Fragment = ""
+				normalizedLink := linkU.String()
 				
 				// 2. Exclusion Check
-				excluded := false
-				for _, ex := range exclusions {
-					if matched, _ := regexp.MatchString(ex, link); matched {
-						excluded = true
-						break
-					}
+			excluded := false
+			for _, ex := range exclusions {
+				if matched, _ := regexp.MatchString(ex, normalizedLink); matched {
+					excluded = true
+					break
 				}
-				if excluded {
-					continue
-				}
-				
-				if seen[link] { continue }
-				seen[link] = true
-				
+			}
+			if excluded {
+				continue
+			}
+			
+			if seen[normalizedLink] { continue }
+			seen[normalizedLink] = true
+			
 				newPages = append(newPages, PageDTO{
 					SourceID: payload.SourceID,
-					URL:      link,
+					URL:      normalizedLink,
 					Status:   "pending",
 					Depth:    payload.Depth + 1,
 				})
@@ -231,7 +249,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 							"gemini_api_key": apiKey,
 							"correlation_id": correlationID,
 						})
-						if err := h.publisher.Publish("ingest.task", taskPayload); err != nil {
+							if err := h.publisher.Publish("ingest.task", taskPayload); err != nil {
 							slog.ErrorContext(ctx, "failed to publish task, marking page as failed", "error", err, "url", newURL)
 							_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, newURL, "failed", fmt.Sprintf("Failed to publish task: %v", err))
 						}
@@ -249,7 +267,8 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	// 6. Check Source Completion
-	pendingCount, err := h.pageManager.CountPendingPages(ctx, payload.SourceID)
+
+pendingCount, err := h.pageManager.CountPendingPages(ctx, payload.SourceID)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to count pending pages", "error", err)
 	} else if pendingCount == 0 {

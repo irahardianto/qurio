@@ -2,6 +2,7 @@ import asyncio
 import structlog
 from concurrent.futures import ThreadPoolExecutor
 from docling.document_converter import DocumentConverter
+import os
 
 logger = structlog.get_logger(__name__)
 
@@ -30,7 +31,11 @@ async def handle_file_task(file_path: str) -> list[dict]:
         )
         
         content = result.document.export_to_markdown()
-        return [{"url": file_path, "content": content}]
+        
+        # Extract title from filename
+        title = os.path.basename(file_path)
+        
+        return [{"url": file_path, "content": content, "title": title}]
 
     except asyncio.TimeoutError:
         logger.error("conversion_timeout", path=file_path)

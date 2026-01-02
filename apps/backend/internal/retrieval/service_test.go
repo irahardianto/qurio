@@ -16,8 +16,12 @@ func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error
 }
 
 type MockStore struct { mock.Mock }
-func (m *MockStore) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int) ([]retrieval.SearchResult, error) {
-	args := m.Called(ctx, query, vector, alpha, limit)
+func (m *MockStore) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int, filters map[string]interface{}) ([]retrieval.SearchResult, error) {
+	args := m.Called(ctx, query, vector, alpha, limit, filters)
+	return args.Get(0).([]retrieval.SearchResult), args.Error(1)
+}
+func (m *MockStore) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {
+	args := m.Called(ctx, url)
 	return args.Get(0).([]retrieval.SearchResult), args.Error(1)
 }
 
@@ -55,7 +59,8 @@ func TestSearch_WithReranker(t *testing.T) {
 		{Content: "A", Score: 0.5},
 		{Content: "B", Score: 0.6},
 	}
-	s.On("Search", ctx, "test", []float32{0.1}, float32(0.5), 10).Return(initialResults, nil)
+	// Note: filters is nil here
+	s.On("Search", ctx, "test", []float32{0.1}, float32(0.5), 10, map[string]interface{}(nil)).Return(initialResults, nil)
 	
 	// Reranker swaps them: [1, 0]
 	r.On("Rerank", ctx, "test", []string{"A", "B"}).Return([]int{1, 0}, nil)
@@ -84,7 +89,7 @@ func TestSearch(t *testing.T) {
 		{Content: "result", Score: 0.9, Metadata: map[string]interface{}{"source": "doc1"}},
 	}
 	// Verify alpha is 0.5
-	s.On("Search", ctx, "test", []float32{0.1}, float32(0.5), 10).Return(expected, nil)
+	s.On("Search", ctx, "test", []float32{0.1}, float32(0.5), 10, map[string]interface{}(nil)).Return(expected, nil)
 
 	res, err := svc.Search(ctx, "test", nil)
 	assert.NoError(t, err)
@@ -108,7 +113,7 @@ func TestSearch_WithOptions(t *testing.T) {
 	expected := []retrieval.SearchResult{}
 	
 	// Expect overridden alpha 0.8 and limit 5
-	s.On("Search", ctx, "test", []float32{0.1}, float32(0.8), 5).Return(expected, nil)
+	s.On("Search", ctx, "test", []float32{0.1}, float32(0.8), 5, map[string]interface{}(nil)).Return(expected, nil)
 
 	alpha := float32(0.8)
 	limit := 5
@@ -116,4 +121,55 @@ func TestSearch_WithOptions(t *testing.T) {
 
 	_, err := svc.Search(ctx, "test", opts)
 	assert.NoError(t, err)
+}
+
+func TestSearch_WithFilters(t *testing.T) {
+	e := new(MockEmbedder)
+	s := new(MockStore)
+	
+	repo := new(MockSettingsRepo)
+	repo.On("Get", mock.Anything).Return(&settings.Settings{SearchAlpha: 0.5, SearchTopK: 10}, nil)
+	setSvc := settings.NewService(repo)
+
+	svc := retrieval.NewService(e, s, nil, setSvc, nil)
+
+	ctx := context.Background()
+	e.On("Embed", ctx, "test").Return([]float32{0.1}, nil)
+	
+	expected := []retrieval.SearchResult{}
+	
+	filters := map[string]interface{}{"type": "code"}
+	opts := &retrieval.SearchOptions{
+		Filters: filters,
+	}
+
+	// Expect filters to be passed
+	s.On("Search", ctx, "test", []float32{0.1}, float32(0.5), 10, filters).Return(expected, nil)
+
+	_, err := svc.Search(ctx, "test", opts)
+	assert.NoError(t, err)
+}
+
+func TestGetChunksByURL(t *testing.T) {
+	e := new(MockEmbedder)
+	s := new(MockStore)
+	repo := new(MockSettingsRepo)
+	setSvc := settings.NewService(repo)
+
+	svc := retrieval.NewService(e, s, nil, setSvc, nil)
+	ctx := context.Background()
+	url := "http://example.com"
+	
+	expected := []retrieval.SearchResult{
+		{Content: "chunk1", Metadata: map[string]interface{}{"url": url}},
+		{Content: "chunk2", Metadata: map[string]interface{}{"url": url}},
+	}
+	
+	s.On("GetChunksByURL", ctx, url).Return(expected, nil)
+	
+	results, err := svc.GetChunksByURL(ctx, url)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, "chunk1", results[0].Content)
+	s.AssertExpectations(t)
 }

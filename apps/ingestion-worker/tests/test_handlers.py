@@ -32,6 +32,33 @@ from handlers.web import handle_web_task
 from handlers.file import handle_file_task
 
 @pytest.mark.asyncio
+async def test_handle_web_task_returns_title():
+    # Mock result
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# My Page Title\nSome content"
+    mock_result.url = "http://example.com"
+    mock_result.links = {'internal': []}
+    
+    # Mock crawler
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+    
+    # Context manager mock
+    mock_crawler_cm = AsyncMock()
+    mock_crawler_cm.__aenter__.return_value = mock_crawler
+    mock_crawler_cm.__aexit__.return_value = None
+    
+    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
+        result = await handle_web_task("http://example.com")
+        
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert "title" in result[0]
+        # Since we use a fallback regex in our plan, we expect it to match the header
+        assert result[0]["title"] == "My Page Title"
+
+@pytest.mark.asyncio
 async def test_handle_web_task_success():
     # Mock result
     mock_result = MagicMock()
