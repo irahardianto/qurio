@@ -29,7 +29,7 @@ All error responses follow this envelope:
 | `GET` | `/sources` | List all active sources | - |
 | `GET` | `/sources/{id}` | Get source details & chunks | - |
 | `POST` | `/sources` | Create new web source | `{"url": "...", "max_depth": 0, "exclusions": []}` |
-| `POST` | `/sources/upload` | Upload document source | `multipart/form-data` (`file`: binary) |
+| `POST` | `/sources/upload` | Upload document source | `multipart/form-data` (`file`: binary, max 50MB) |
 | `DELETE` | `/sources/{id}` | Soft delete source | - |
 | `POST` | `/sources/{id}/resync` | Trigger re-ingestion | - |
 | `GET` | `/sources/{id}/pages` | List pages in source | - |

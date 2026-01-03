@@ -2,7 +2,7 @@
 import { useSourceStore } from './source.store'
 import { onMounted, onUnmounted } from 'vue'
 import { RefreshCw, Trash2, ExternalLink, FileText } from 'lucide-vue-next'
-import StatusBadge from '../../components/ui/StatusBadge.vue'
+import StatusBadge from '@/components/ui/StatusBadge.vue'
 import {
   Card,
   CardContent,

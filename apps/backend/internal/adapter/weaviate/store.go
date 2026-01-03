@@ -35,6 +35,9 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 	if chunk.Title != "" {
 		properties["title"] = chunk.Title
 	}
+	if chunk.SourceName != "" {
+		properties["sourceName"] = chunk.SourceName
+	}
 
 	_, err := s.client.Data().Creator().
 		WithClassName("DocumentChunk").
@@ -90,6 +93,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 		{Name: "type"},
 		{Name: "language"},
 		{Name: "title"},
+		{Name: "sourceName"},
 		{Name: "_additional", Fields: []graphql.Field{{Name: "score"}}},
 	}
 
@@ -157,6 +161,9 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 					if titleVal, ok := props["title"].(string); ok {
 						result.Metadata["title"] = titleVal
 					}
+					if sourceName, ok := props["sourceName"].(string); ok {
+						result.Metadata["sourceName"] = sourceName
+					}
 					
 					// Extract score
 					if additional, ok := props["_additional"].(map[string]interface{}); ok {
@@ -187,6 +194,7 @@ func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk,
 		{Name: "type"},
 		{Name: "language"},
 		{Name: "title"},
+		{Name: "sourceName"},
 	}
 
 	where := filters.Where().
@@ -235,6 +243,9 @@ func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk,
 					if title, ok := props["title"].(string); ok {
 						chunk.Title = title
 					}
+					if sourceName, ok := props["sourceName"].(string); ok {
+						chunk.SourceName = sourceName
+					}
 					chunks = append(chunks, chunk)
 				}
 			}
@@ -252,6 +263,7 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 		{Name: "type"},
 		{Name: "language"},
 		{Name: "title"},
+		{Name: "sourceName"},
 	}
 
 	where := filters.Where().
@@ -302,6 +314,9 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 					}
 					if title, ok := props["title"].(string); ok {
 						result.Metadata["title"] = title
+					}
+					if sourceName, ok := props["sourceName"].(string); ok {
+						result.Metadata["sourceName"] = sourceName
 					}
 					results = append(results, result)
 				}

@@ -20,10 +20,12 @@ func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error
 }
 
 type MockStore struct {
-	LastCtx context.Context
+	LastCtx   context.Context
+	LastChunk Chunk
 }
 func (m *MockStore) StoreChunk(ctx context.Context, chunk Chunk) error {
 	m.LastCtx = ctx
+	m.LastChunk = chunk
 	return nil
 }
 func (m *MockStore) DeleteChunksByURL(ctx context.Context, sourceID, url string) error {
@@ -44,7 +46,7 @@ func (m *MockJobRepo) Count(ctx context.Context) (int, error) { return 0, nil }
 
 type MockSourceFetcher struct{}
 func (m *MockSourceFetcher) GetSourceDetails(ctx context.Context, id string) (string, string, error) { return "web", "http://example.com", nil }
-func (m *MockSourceFetcher) GetSourceConfig(ctx context.Context, id string) (int, []string, string, error) { return 0, nil, "", nil }
+func (m *MockSourceFetcher) GetSourceConfig(ctx context.Context, id string) (int, []string, string, string, error) { return 0, nil, "", "test-source", nil }
 
 type MockPageManager struct{}
 func (m *MockPageManager) BulkCreatePages(ctx context.Context, pages []PageDTO) ([]string, error) { return nil, nil }
@@ -88,5 +90,28 @@ func TestResultConsumer_HandleMessage_CorrelationID(t *testing.T) {
 	}
 	if id := middleware.GetCorrelationID(store.LastCtx); id != expectedID {
 		t.Errorf("Store context missing correlation ID. Got '%s', expected '%s'", id, expectedID)
+	}
+}
+
+func TestResultConsumer_PopulatesSourceName(t *testing.T) {
+	embedder := &MockEmbedder{}
+	store := &MockStore{}
+	consumer := NewResultConsumer(embedder, store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})
+
+	payload := map[string]string{
+		"source_id": "src-1",
+		"content":   "test content",
+		"url":       "http://example.com",
+		"status":    "success",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	if err := consumer.HandleMessage(msg); err != nil {
+		t.Fatalf("HandleMessage failed: %v", err)
+	}
+
+	if store.LastChunk.SourceName != "test-source" {
+		t.Errorf("Expected SourceName 'test-source', got '%s'", store.LastChunk.SourceName)
 	}
 }

@@ -175,6 +175,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 						Type:       string(c.Type),
 						Language:   c.Language,
 						Title:      payload.Title,
+						SourceName: sourceName,
 					}
 
 					return h.store.StoreChunk(embedCtx, chunk)

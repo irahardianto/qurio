@@ -209,20 +209,20 @@ const copyToClipboard = (text: string) => {
              >
                <div class="flex items-center justify-between mb-1">
                  <span class="font-mono text-xs text-muted-foreground flex items-center gap-1">
-                   <Hash class="h-3 w-3" /> {{ chunk.ChunkIndex }}
+                   <Hash class="h-3 w-3" /> {{ chunk.chunk_index }}
                  </span>
                  <div class="flex items-center gap-1">
-                    <Badge v-if="chunk.Type" variant="outline" class="text-[9px] px-1 py-0 h-4 uppercase">{{ chunk.Type }}</Badge>
+                    <Badge v-if="chunk.type" variant="outline" class="text-[9px] px-1 py-0 h-4 uppercase">{{ chunk.type }}</Badge>
                     <span class="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
-                      {{ chunk.Content?.length || 0 }}
+                      {{ chunk.content?.length || 0 }}
                     </span>
                  </div>
                </div>
-               <div v-if="chunk.Title" class="text-xs font-semibold truncate text-foreground/80 mb-0.5">
-                 {{ chunk.Title }}
+               <div v-if="chunk.title" class="text-xs font-semibold truncate text-foreground/80 mb-0.5">
+                 {{ chunk.title }}
                </div>
                <div class="text-xs font-medium truncate opacity-70">
-                 {{ chunk.Content?.substring(0, 50) }}...
+                 {{ chunk.content?.substring(0, 50) }}...
                </div>
              </button>
            </div>
@@ -234,28 +234,28 @@ const copyToClipboard = (text: string) => {
                  <div class="space-y-1">
                    <div class="flex items-center gap-2">
                      <h4 class="text-lg font-bold font-mono text-primary flex items-center gap-2">
-                       Chunk #{{ selectedChunk.ChunkIndex }}
+                       Chunk #{{ selectedChunk.chunk_index }}
                      </h4>
-                     <Badge v-if="selectedChunk.Type" variant="secondary" class="font-mono text-xs uppercase">
-                        {{ selectedChunk.Type }}
+                     <Badge v-if="selectedChunk.type" variant="secondary" class="font-mono text-xs uppercase">
+                        {{ selectedChunk.type }}
                      </Badge>
-                     <Badge v-if="selectedChunk.Language" variant="outline" class="font-mono text-xs">
-                        {{ selectedChunk.Language }}
+                     <Badge v-if="selectedChunk.language" variant="outline" class="font-mono text-xs">
+                        {{ selectedChunk.language }}
                      </Badge>
                    </div>
                    
-                   <div v-if="selectedChunk.Title" class="text-base font-semibold text-foreground/90">
-                      {{ selectedChunk.Title }}
+                   <div v-if="selectedChunk.title" class="text-base font-semibold text-foreground/90">
+                      {{ selectedChunk.title }}
                    </div>
 
                    <div class="flex items-center gap-2 text-sm text-muted-foreground">
                      <FileText class="h-4 w-4" />
-                     <span class="truncate max-w-[300px]" :title="selectedChunk.SourceURL">
-                       {{ selectedChunk.SourceURL }}
+                     <span class="truncate max-w-[300px]" :title="selectedChunk.source_url">
+                       {{ selectedChunk.source_url }}
                      </span>
                    </div>
                  </div>
-                 <Button variant="ghost" size="sm" @click="copyToClipboard(selectedChunk.Content)" title="Copy Content">
+                 <Button variant="ghost" size="sm" @click="copyToClipboard(selectedChunk.content)" title="Copy Content">
                    <Copy class="h-4 w-4" />
                  </Button>
                </div>
@@ -268,7 +268,7 @@ const copyToClipboard = (text: string) => {
                    <div class="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
                      <!-- Floating actions could go here -->
                    </div>
-                   <pre class="whitespace-pre-wrap font-mono text-sm leading-relaxed bg-background/50 p-4 rounded-lg border border-border text-foreground/90 overflow-x-auto">{{ selectedChunk.Content }}</pre>
+                   <pre class="whitespace-pre-wrap font-mono text-sm leading-relaxed bg-background/50 p-4 rounded-lg border border-border text-foreground/90 overflow-x-auto">{{ selectedChunk.content }}</pre>
                  </div>
                </div>
              </div>

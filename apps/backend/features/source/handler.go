@@ -58,7 +58,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
-	// 50 MB limit
+	// 50 MB limit (enforced at reader level)
+	r.Body = http.MaxBytesReader(w, r.Body, 50<<20)
+
+	// 50 MB limit (memory)
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		h.writeError(r.Context(), w, "BAD_REQUEST", "File too large", http.StatusBadRequest)
 		return

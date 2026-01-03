@@ -35,7 +35,7 @@ async def handle_file_task(file_path: str) -> list[dict]:
         # Extract title from filename
         title = os.path.basename(file_path)
         
-        return [{"url": file_path, "content": content, "title": title}]
+        return [{"url": file_path, "content": content, "title": title, "path": file_path}]
 
     except asyncio.TimeoutError:
         logger.error("conversion_timeout", path=file_path)

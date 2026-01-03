@@ -5,14 +5,15 @@ import (
 )
 
 type Chunk struct {
-	Content    string
-	Vector     []float32
-	SourceURL  string
-	SourceID   string
-	ChunkIndex int
-	Type       string
-	Language   string
-	Title      string
+	Content    string    `json:"content"`
+	Vector     []float32 `json:"vector"`
+	SourceURL  string    `json:"source_url"`
+	SourceID   string    `json:"source_id"`
+	SourceName string    `json:"source_name"`
+	ChunkIndex int       `json:"chunk_index"`
+	Type       string    `json:"type"`
+	Language   string    `json:"language"`
+	Title      string    `json:"title"`
 }
 
 type Embedder interface {

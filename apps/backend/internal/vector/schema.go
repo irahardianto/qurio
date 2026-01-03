@@ -32,6 +32,10 @@ func EnsureSchema(ctx context.Context, client SchemaClient) error {
 			DataType: []string{"string"}, // UUID as string (exact match)
 		},
 		{
+			Name:     "sourceName",
+			DataType: []string{"text"},
+		},
+		{
 			Name:     "chunkIndex",
 			DataType: []string{"int"},
 		},

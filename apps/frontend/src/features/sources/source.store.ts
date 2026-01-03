@@ -2,14 +2,15 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export interface Chunk {
-  Content: string
-  Vector?: number[]
-  SourceURL: string
-  SourceID: string
-  ChunkIndex: number
-  Type: string
-  Language: string
-  Title: string
+  content: string
+  vector?: number[]
+  source_url: string
+  source_id: string
+  source_name?: string
+  chunk_index: number
+  type: string
+  language: string
+  title: string
 }
 
 export interface Source {

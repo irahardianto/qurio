@@ -120,4 +120,5 @@ async def test_handle_file_task_success():
         assert len(result) == 1
         assert result[0]["content"] == "# File Content"
         assert result[0]["url"] == "/tmp/test.pdf"
+        assert result[0]["path"] == "/tmp/test.pdf"
         mock_converter.convert.assert_called_with("/tmp/test.pdf")

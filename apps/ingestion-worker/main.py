@@ -71,6 +71,7 @@ async def process_message(message):
                     "content": res['content'],
                     "title": res.get('title', ''),
                     "url": res['url'],
+                    "path": res.get('path', ''),
                     "status": "success",
                     "links": res.get('links', []),
                     "depth": data.get('depth', 0)
