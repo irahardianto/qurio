@@ -36,4 +36,5 @@
 5.  **Ingestion & Retrieval (Qurio):**
     - **Chunking:** Markdown-aware splitting with strict code block preservation and **API endpoint detection**.
     - **Crawling:** URL normalization, dynamic sidebar link discovery, and **Breadcrumb (`path`) extraction**.
-    - **Storage:** Weaviate schema with dynamic properties. **Contextual Embeddings** enriched with `Source Name`, `Path`, `Title`, `Type`, and `URL`.
+    - **Storage:** Weaviate schema with dynamic properties. **Contextual Embeddings** enriched with `Source Name`, `Path`, `Title`, `Type`, `URL`, `Author`, and `Created At`.
+    - **Worker:** Python worker with `pynsq` and `docling` for file metadata extraction.

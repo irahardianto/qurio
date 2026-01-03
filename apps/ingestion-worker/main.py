@@ -7,7 +7,7 @@ from tornado.iostream import StreamClosedError
 import structlog
 from config import settings
 from handlers.web import handle_web_task
-from handlers.file import handle_file_task
+from handlers.file import handle_file_task, IngestionError
 from logger import configure_logger
 
 # Configure logging
@@ -24,6 +24,7 @@ def handle_message(message):
     """
     message.enable_async()
     asyncio.create_task(process_message(message))
+
 
 async def process_message(message):
     global producer
@@ -62,13 +63,22 @@ async def process_message(message):
         
         elif task_type == 'file':
             file_path = data.get('path')
-            results_list = await handle_file_task(file_path)
+            file_result = await handle_file_task(file_path)
+            results_list = [{
+                "content": file_result['content'],
+                "metadata": file_result['metadata'],
+                "url": file_path,
+                "path": file_path,
+                "title": file_result['metadata'].get('title', ''),
+                "links": []
+            }]
             
         if results_list and producer:
             for res in results_list:
                 result_payload = {
                     "source_id": source_id,
                     "content": res['content'],
+                    "metadata": res.get('metadata', {}),
                     "title": res.get('title', ''),
                     "url": res['url'],
                     "path": res.get('path', ''),
@@ -109,6 +119,35 @@ async def process_message(message):
         except Exception as e:
             logger.warning("finish_failed", error=str(e))
     
+    except IngestionError as e:
+        logger.error("ingestion_error", error=str(e), code=e.code)
+        
+        if producer and 'source_id' in locals():
+            fail_payload = {
+                "source_id": source_id,
+                "status": "failed",
+                "error": {
+                     "code": e.code,
+                     "message": str(e)
+                },
+                "url": data.get('url', '') or data.get('path', ''),
+                "original_payload": data
+            }
+            try:
+                producer.pub(
+                    settings.nsq_topic_result,
+                    json.dumps(fail_payload).encode('utf-8'),
+                    callback=lambda c, d: logger.info("failure_reported", source_id=source_id, code=e.code)
+                )
+            except Exception as ex:
+                logger.error("pub_failed_in_error_handler", error=str(ex))
+        
+        try:
+            message.finish()
+        except Exception as ex:
+            logger.warning("finish_failed_in_error_handler", error=str(ex))
+        return
+
     except asyncio.CancelledError:
         logger.warning("processing_cancelled_due_to_connection_loss", source_id=source_id if 'source_id' in locals() else "unknown")
         # Do not finish message if cancelled, let it requeue or expire? 

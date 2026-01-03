@@ -28,8 +28,8 @@ markdown_generation_strategy.DefaultMarkdownGenerator = MagicMock()
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch, ANY
+import asyncio
 from handlers.web import handle_web_task
-from handlers.file import handle_file_task
 
 @pytest.mark.asyncio
 async def test_handle_web_task_returns_title():
@@ -105,20 +105,3 @@ async def test_handle_web_task_failure():
     with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
         with pytest.raises(Exception, match="Crawl failed: Failed"):
             await handle_web_task("http://example.com")
-
-@pytest.mark.asyncio
-async def test_handle_file_task_success():
-    # Mock converter result
-    mock_result = MagicMock()
-    mock_result.document.export_to_markdown.return_value = "# File Content"
-    
-    with patch('handlers.file.converter') as mock_converter:
-        mock_converter.convert.return_value = mock_result
-        
-        result = await handle_file_task("/tmp/test.pdf")
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0]["content"] == "# File Content"
-        assert result[0]["url"] == "/tmp/test.pdf"
-        assert result[0]["path"] == "/tmp/test.pdf"
-        mock_converter.convert.assert_called_with("/tmp/test.pdf")
