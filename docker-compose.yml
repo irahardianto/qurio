@@ -58,6 +58,11 @@ services:
     environment:
       - NSQ_LOOKUPD_HTTP=nsqlookupd:4161
       - NSQD_TCP_ADDRESS=nsqd:4150
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 8G
     volumes:
       - qurio_uploads:/var/lib/qurio/uploads
   

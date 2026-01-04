@@ -12,10 +12,12 @@ import (
 
 // Mocks
 type MockEmbedder struct {
-	LastCtx context.Context
+	LastCtx  context.Context
+	LastText string
 }
 func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	m.LastCtx = ctx
+	m.LastText = text
 	return []float32{0.1, 0.2}, nil
 }
 
@@ -114,4 +116,57 @@ func TestResultConsumer_PopulatesSourceName(t *testing.T) {
 	if store.LastChunk.SourceName != "test-source" {
 		t.Errorf("Expected SourceName 'test-source', got '%s'", store.LastChunk.SourceName)
 	}
+}
+
+func TestHandleMessage_WithMetadata(t *testing.T) {
+	embedder := &MockEmbedder{}
+	store := &MockStore{}
+	consumer := NewResultConsumer(embedder, store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})
+
+	payload := map[string]interface{}{
+		"source_id": "src-1",
+		"content":   "test content",
+		"url":       "http://example.com",
+		"status":    "success",
+		"metadata": map[string]interface{}{
+			"author":     "John Doe",
+			"created_at": "2023-01-01",
+			"pages":      10,
+		},
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	if err := consumer.HandleMessage(msg); err != nil {
+		t.Fatalf("HandleMessage failed: %v", err)
+	}
+
+	// Verify Author is in the embedded text
+	if !contains(embedder.LastText, "Author: John Doe") {
+		t.Errorf("Embedded text missing Author. Got: %s", embedder.LastText)
+	}
+	// Verify Created is in the embedded text
+	if !contains(embedder.LastText, "Created: 2023-01-01") {
+		t.Errorf("Embedded text missing Created. Got: %s", embedder.LastText)
+	}
+
+	// Verify Chunk metadata
+	if store.LastChunk.Author != "John Doe" {
+		t.Errorf("Chunk Author mismatch. Got: %s, Want: John Doe", store.LastChunk.Author)
+	}
+	if store.LastChunk.CreatedAt != "2023-01-01" {
+		t.Errorf("Chunk CreatedAt mismatch. Got: %s, Want: 2023-01-01", store.LastChunk.CreatedAt)
+	}
+	if store.LastChunk.PageCount != 10 {
+		t.Errorf("Chunk PageCount mismatch. Got: %d, Want: 10", store.LastChunk.PageCount)
+	}
+}
+
+func contains(s, substr string) bool {
+    for i := 0; i < len(s)-len(substr)+1; i++ {
+        if s[i:i+len(substr)] == substr {
+            return true
+        }
+    }
+    return false
 }

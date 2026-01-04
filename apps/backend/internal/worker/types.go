@@ -14,6 +14,9 @@ type Chunk struct {
 	Type       string    `json:"type"`
 	Language   string    `json:"language"`
 	Title      string    `json:"title"`
+	Author     string    `json:"author"`
+	CreatedAt  string    `json:"created_at"`
+	PageCount  int       `json:"page_count"`
 }
 
 type Embedder interface {

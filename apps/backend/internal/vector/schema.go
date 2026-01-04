@@ -55,6 +55,18 @@ func EnsureSchema(ctx context.Context, client SchemaClient) error {
 			Name:     "language",
 			DataType: []string{"string"},
 		},
+		{
+			Name:     "author",
+			DataType: []string{"text"},
+		},
+		{
+			Name:     "createdAt",
+			DataType: []string{"date"},
+		},
+		{
+			Name:     "pageCount",
+			DataType: []string{"int"},
+		},
 	}
 
 	if !exists {

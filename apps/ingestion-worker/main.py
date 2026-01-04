@@ -123,13 +123,11 @@ async def process_message(message):
         logger.error("ingestion_error", error=str(e), code=e.code)
         
         if producer and 'source_id' in locals():
+            error_code = e.code
             fail_payload = {
                 "source_id": source_id,
                 "status": "failed",
-                "error": {
-                     "code": e.code,
-                     "message": str(e)
-                },
+                "error": f"[{e.code}] {e}",
                 "url": data.get('url', '') or data.get('path', ''),
                 "original_payload": data
             }
@@ -137,7 +135,7 @@ async def process_message(message):
                 producer.pub(
                     settings.nsq_topic_result,
                     json.dumps(fail_payload).encode('utf-8'),
-                    callback=lambda c, d: logger.info("failure_reported", source_id=source_id, code=e.code)
+                    callback=lambda c, d: logger.info("failure_reported", source_id=source_id, code=error_code)
                 )
             except Exception as ex:
                 logger.error("pub_failed_in_error_handler", error=str(ex))

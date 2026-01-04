@@ -38,6 +38,15 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 	if chunk.SourceName != "" {
 		properties["sourceName"] = chunk.SourceName
 	}
+	if chunk.Author != "" {
+		properties["author"] = chunk.Author
+	}
+	if chunk.CreatedAt != "" {
+		properties["createdAt"] = chunk.CreatedAt
+	}
+	if chunk.PageCount > 0 {
+		properties["pageCount"] = chunk.PageCount
+	}
 
 	_, err := s.client.Data().Creator().
 		WithClassName("DocumentChunk").

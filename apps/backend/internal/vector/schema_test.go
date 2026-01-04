@@ -101,3 +101,43 @@ func TestEnsureSchema_AddsMissingProperties(t *testing.T) {
 		t.Error("Should not re-add existing 'content' property")
 	}
 }
+
+func TestEnsureSchema_AddsNewMetadataProperties(t *testing.T) {
+	// Simulate existing class with all old properties but missing new metadata ones
+	existingClass := &models.Class{
+		Class: "DocumentChunk",
+		Properties: []*models.Property{
+			{Name: "content", DataType: []string{"text"}},
+			{Name: "sourceId", DataType: []string{"string"}},
+			{Name: "sourceName", DataType: []string{"text"}},
+			{Name: "chunkIndex", DataType: []string{"int"}},
+			{Name: "title", DataType: []string{"text"}},
+			{Name: "url", DataType: []string{"string"}},
+			{Name: "type", DataType: []string{"string"}},
+			{Name: "language", DataType: []string{"string"}},
+		},
+	}
+	
+	client := &MockSchemaClient{
+		ExistingClass: existingClass,
+	}
+
+	if err := EnsureSchema(context.Background(), client); err != nil {
+		t.Fatalf("EnsureSchema failed: %v", err)
+	}
+
+	addedNames := make(map[string]bool)
+	for _, p := range client.AddedProperties {
+		addedNames[p.Name] = true
+	}
+
+	if !addedNames["author"] {
+		t.Error("Missing 'author' property")
+	}
+	if !addedNames["createdAt"] {
+		t.Error("Missing 'createdAt' property")
+	}
+	if !addedNames["pageCount"] {
+		t.Error("Missing 'pageCount' property")
+	}
+}

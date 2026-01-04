@@ -1,6 +1,7 @@
 pynsq==0.9.1
 crawl4ai[google]>=0.4.0
-docling
+docling>=2.0.0
+pebble
 python-snappy
 uvloop
 pydantic

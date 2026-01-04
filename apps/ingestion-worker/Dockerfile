@@ -26,5 +26,19 @@ RUN playwright install --with-deps chromium
 
 COPY . .
 
+# Pre-download models to prevent runtime race conditions in workers
+# We set strict threading limits globally to be safe
+# Bump to 2 threads for better performance on high-core machines
+# Total load: 8 workers * 2 threads = 16 threads (leaving room on 24-thread host)
+ENV OMP_NUM_THREADS=2
+ENV MKL_NUM_THREADS=2
+ENV OPENBLAS_NUM_THREADS=2
+ENV VECLIB_MAXIMUM_THREADS=2
+ENV NUMEXPR_NUM_THREADS=2
+ENV ONNX_NUM_THREADS=1
+
+# Trigger model download during build
+RUN python -c "from docling.utils.model_downloader import download_models; download_models()"
+
 CMD ["python", "main.py"]
 

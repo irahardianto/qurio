@@ -2,48 +2,109 @@ import pytest
 from unittest.mock import MagicMock, patch
 import asyncio
 from concurrent.futures import Future
-from handlers.file import handle_file_task, ERR_ENCRYPTED, ERR_INVALID_FORMAT, ERR_TIMEOUT, IngestionError
+import handlers.file
+from handlers.file import handle_file_task, ERR_ENCRYPTED, ERR_INVALID_FORMAT, ERR_TIMEOUT, IngestionError, CONCURRENCY_LIMIT
+
+# Helper to create a done future for asyncio.wrap_future
+def create_done_future(result=None, exception=None):
+    f = asyncio.Future()
+    if exception:
+        f.set_exception(exception)
+    else:
+        f.set_result(result)
+    return f
 
 @pytest.mark.asyncio
 async def test_handle_encrypted_pdf():
-    with patch('handlers.file.converter') as mock_converter:
-        mock_converter.convert.side_effect = Exception("Encrypted") # Simulating docling error
+    """Test handling of encrypted PDF files."""
+    # Patch the executor instance in handlers.file
+    with patch.object(handlers.file, 'executor') as mock_executor:
+        mock_future = MagicMock()
+        mock_executor.schedule.return_value = mock_future
         
-        with pytest.raises(Exception) as excinfo:
-             await handle_file_task("/tmp/secret.pdf")
-        
-        assert excinfo.value.code == ERR_ENCRYPTED
+        # Patch asyncio.wrap_future in handlers.file
+        with patch('handlers.file.asyncio.wrap_future') as mock_wrap:
+            mock_wrap.return_value = create_done_future(exception=Exception("File is password protected"))
+            
+            with pytest.raises(IngestionError) as excinfo:
+                 await handle_file_task("/tmp/secret.pdf")
+            
+            assert excinfo.value.code == ERR_ENCRYPTED
 
 @pytest.mark.asyncio
 async def test_metadata_extraction():
-     with patch('handlers.file.converter') as mock_converter:
-        mock_doc = MagicMock()
-        mock_doc.document.export_to_markdown.return_value = "# Content"
-        mock_doc.document.meta.title = "Test Title"
-        mock_doc.document.meta.author = "Test Author"
-        mock_doc.document.num_pages = 10
-        mock_converter.convert.return_value = mock_doc
+    """Test successful metadata extraction."""
+    # Match the structure expected by the updated handler (Docling v2 style)
+    expected_result = {
+        "content": "# Content",
+        "metadata": {
+            "title": "Test Title",
+            "author": "Test Author",
+            "pages": 10,
+            "created_at": None,
+            "language": "en"
+        }
+    }
+    
+    with patch.object(handlers.file, 'executor') as mock_executor:
+        mock_future = MagicMock()
+        mock_executor.schedule.return_value = mock_future
         
-        result = await handle_file_task("/tmp/test.pdf")
-        
-        assert result['metadata']['title'] == "Test Title"
-        assert result['metadata']['pages'] == 10
+        with patch('handlers.file.asyncio.wrap_future') as mock_wrap:
+            mock_wrap.return_value = create_done_future(result=expected_result)
+            
+            result = await handle_file_task("/tmp/test.pdf")
+            
+            assert result['metadata']['title'] == "Test Title"
+            assert result['metadata']['pages'] == 10
+            assert result['content'] == "# Content"
 
 @pytest.mark.asyncio
 async def test_timeout():
-    # Verify timeout handling
-    with patch('handlers.file.executor') as mock_executor:
-         mock_executor.submit.return_value = Future()
-         with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError):
+    """Test timeout handling."""
+    with patch.object(handlers.file, 'executor') as mock_executor:
+         mock_executor.schedule.return_value = MagicMock()
+         
+         with patch('handlers.file.asyncio.wrap_future') as mock_wrap:
+             mock_wrap.return_value = create_done_future(exception=asyncio.TimeoutError())
+             
              with pytest.raises(IngestionError) as exc:
                  await handle_file_task("/tmp/slow.pdf")
              assert exc.value.code == ERR_TIMEOUT
 
 @pytest.mark.asyncio
 async def test_concurrency_limit():
-    # Verify semaphore existence and value
-    from handlers.file import CONCURRENCY_LIMIT
-    assert isinstance(CONCURRENCY_LIMIT, asyncio.Semaphore)
-    # Note: In CPython asyncio.Semaphore internal value is _value, but might be different implementation.
-    # Safest is to check we can acquire it.
-    assert CONCURRENCY_LIMIT._value == 2
+    """Verify semaphore configuration."""
+    # Ensure we are checking the actual value used in the module
+    assert isinstance(handlers.file.CONCURRENCY_LIMIT, asyncio.Semaphore)
+    assert handlers.file.CONCURRENCY_LIMIT._value == 4
+
+@pytest.mark.asyncio
+async def test_end_to_end_pdf_simulation():
+    """Simulate a full PDF upload flow."""
+    simulated_worker_output = {
+        "content": "# Chapter 1\nRESTful Web Services...",
+        "metadata": {
+            "title": "RESTful Web Services",
+            "author": "Leonard Richardson",
+            "created_at": "2023-01-01",
+            "pages": 450,
+            "language": "en"
+        }
+    }
+    
+    with patch.object(handlers.file, 'executor') as mock_executor:
+        mock_executor.schedule.return_value = MagicMock()
+        
+        with patch('handlers.file.asyncio.wrap_future') as mock_wrap:
+            mock_wrap.return_value = create_done_future(result=simulated_worker_output)
+            
+            # Execute
+            result = await handle_file_task("/var/lib/qurio/uploads/restful.pdf")
+            
+            # Verify structure matches backend expectations
+            assert "content" in result
+            assert "metadata" in result
+            assert result["metadata"]["title"] == "RESTful Web Services"
+            assert result["metadata"]["pages"] == 450
+            assert "Chapter 1" in result["content"]

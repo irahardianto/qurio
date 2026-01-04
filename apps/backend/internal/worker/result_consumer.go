@@ -62,17 +62,18 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	var payload struct {
-		SourceID        string          `json:"source_id"`
-		Content         string          `json:"content"`
-		Title           string          `json:"title"`
-		Path            string          `json:"path"`
-		URL             string          `json:"url"`
-		Status          string          `json:"status,omitempty"` // "success" or "failed"
-		Error           string          `json:"error,omitempty"`
-		Links           []string        `json:"links,omitempty"`
-		Depth           int             `json:"depth"`
-		CorrelationID   string          `json:"correlation_id,omitempty"`
-		OriginalPayload json.RawMessage `json:"original_payload,omitempty"`
+		SourceID        string                 `json:"source_id"`
+		Content         string                 `json:"content"`
+		Title           string                 `json:"title"`
+		Path            string                 `json:"path"`
+		URL             string                 `json:"url"`
+		Status          string                 `json:"status,omitempty"` // "success" or "failed"
+		Error           string                 `json:"error,omitempty"`
+		Links           []string               `json:"links,omitempty"`
+		Depth           int                    `json:"depth"`
+		CorrelationID   string                 `json:"correlation_id,omitempty"`
+		OriginalPayload json.RawMessage        `json:"original_payload,omitempty"`
+		Metadata        map[string]interface{} `json:"metadata,omitempty"`
 	}
 	if err := json.Unmarshal(m.Body, &payload); err != nil {
 		slog.Error("invalid message format", "error", err)
@@ -156,10 +157,21 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 					// Title: <Page Title>
 					// URL: <Page URL>
 					// Type: <Content Type>
+					// Author: <Author> (Optional)
+					// Created: <Created At> (Optional)
 					// ---
 					// <Raw Chunk Content>
-					contextualString := fmt.Sprintf("Title: %s\nSource: %s\nPath: %s\nURL: %s\nType: %s\n---\n%s", 
-						payload.Title, sourceName, payload.Path, payload.URL, string(c.Type), c.Content)
+					contextualString := fmt.Sprintf("Title: %s\nSource: %s\nPath: %s\nURL: %s\nType: %s", 
+						payload.Title, sourceName, payload.Path, payload.URL, string(c.Type))
+
+					if author, ok := payload.Metadata["author"].(string); ok && author != "" {
+						contextualString += fmt.Sprintf("\nAuthor: %s", author)
+					}
+					if created, ok := payload.Metadata["created_at"].(string); ok && created != "" {
+						contextualString += fmt.Sprintf("\nCreated: %s", created)
+					}
+
+					contextualString += fmt.Sprintf("\n---\n%s", c.Content)
 
 					vector, err := h.embedder.Embed(embedCtx, contextualString)
 					if err != nil {
@@ -176,6 +188,16 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 						Language:   c.Language,
 						Title:      payload.Title,
 						SourceName: sourceName,
+					}
+
+					if author, ok := payload.Metadata["author"].(string); ok {
+						chunk.Author = author
+					}
+					if created, ok := payload.Metadata["created_at"].(string); ok {
+						chunk.CreatedAt = created
+					}
+					if pages, ok := payload.Metadata["pages"].(float64); ok {
+						chunk.PageCount = int(pages)
 					}
 
 					return h.store.StoreChunk(embedCtx, chunk)
