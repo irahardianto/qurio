@@ -38,7 +38,7 @@ func (r *PostgresRepo) UpdateStatus(ctx context.Context, id, status string) erro
 }
 
 func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
-	query := `SELECT id, type, url, status, max_depth, exclusions, name FROM sources WHERE deleted_at IS NULL ORDER BY created_at DESC`
+	query := `SELECT id, type, url, status, max_depth, exclusions, name, updated_at FROM sources WHERE deleted_at IS NULL ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
 	var sources []Source
 	for rows.Next() {
 		var s Source
-		if err := rows.Scan(&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions), &s.Name); err != nil {
+		if err := rows.Scan(&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions), &s.Name, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)
@@ -58,8 +58,8 @@ func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
 
 func (r *PostgresRepo) Get(ctx context.Context, id string) (*Source, error) {
 	s := &Source{}
-	query := `SELECT id, type, url, status, max_depth, exclusions, name FROM sources WHERE id = $1 AND deleted_at IS NULL`
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions), &s.Name)
+	query := `SELECT id, type, url, status, max_depth, exclusions, name, updated_at FROM sources WHERE id = $1 AND deleted_at IS NULL`
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions), &s.Name, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

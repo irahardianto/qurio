@@ -20,7 +20,11 @@ Qurio exposes its knowledge base via the Model Context Protocol (MCP).
 - `filters` (object): Metadata filters (e.g. `type='code'`, `language='go'`).
 
 **Output:**
-- List of results with Title, Type, Language, SourceID, and Content.
+- List of results with strong-typed top-level metadata:
+  - `Content`: The text snippet.
+  - `Title`, `Author`, `CreatedAt`, `PageCount`: Document metadata.
+  - `Type`, `Language`: Content classification.
+  - `SourceID`, `URL`: Origin tracking.
 - Includes explicit instruction: "Use qurio_read_page(url=\"...\") to read the full content of any result."
 
 ### `qurio_list_sources`

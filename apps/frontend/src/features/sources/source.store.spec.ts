@@ -93,4 +93,19 @@ describe('Source Store', () => {
     expect(store.isLoading).toBe(false)
     expect(store.error).toContain('Failed to add source')
   })
+
+  it('should map updated_at correctly', async () => {
+    const store = useSourceStore()
+    // @ts-ignore - simulating API response with field that doesn't exist on type yet
+    const mockSources = [{ id: '1', name: 'Test', updated_at: '2024-01-01' }]
+    
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: mockSources })
+    })
+
+    await store.fetchSources()
+    // This assertion relies on the field existing on the interface
+    expect(store.sources[0].updated_at).toBe('2024-01-01')
+  })
 })

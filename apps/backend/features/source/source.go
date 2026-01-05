@@ -23,6 +23,7 @@ type Source struct {
 	MaxDepth    int      `json:"max_depth"`
 	Exclusions  []string `json:"exclusions"`
 	Name        string   `json:"name"`
+	UpdatedAt   string   `json:"updated_at"`
 }
 
 type SourcePage struct {

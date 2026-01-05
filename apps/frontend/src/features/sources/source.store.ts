@@ -19,7 +19,7 @@ export interface Source {
   type?: string
   url?: string
   status?: string
-  lastSyncedAt?: string
+  updated_at?: string
   max_depth?: number
   exclusions?: string[]
   chunks?: Chunk[]

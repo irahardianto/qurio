@@ -1,3 +1,10 @@
 - **Logging:** Implemented `apps/backend/internal/logger` package with `ContextHandler` to automatically propagate `correlation_id` from context to JSON logs.
 - **Worker Logic:** Link discovery logic extracted to pure function `DiscoverLinks` in `apps/backend/internal/worker/link_discovery.go` to separate I/O from business logic.
 - **MCP Errors:** `qurio_search` now returns standard JSON-RPC errors (code -32603) for internal failures instead of embedded text errors.
+- **Ingestion Worker:** Refactored `handle_file_task` to return `list[dict]` matching `handle_web_task`, removing brittle manual list wrapping.
+- **Data Consistency:** 
+    - Standardized `Source` entity across stack.
+    - Backend `Source` struct now includes `UpdatedAt` field.
+    - Repository fetches `updated_at` column.
+    - Frontend `Source` interface uses `updated_at` (removed `lastSyncedAt`).
+- **Metadata Exposure:** Promoted metadata fields (`Author`, `CreatedAt`, `PageCount`, `Language`, `Type`, `SourceID`, `URL`) to top-level fields in `SearchResult` struct and refactored Weaviate adapter/MCP handler to use strong typing.

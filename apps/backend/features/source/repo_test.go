@@ -44,10 +44,10 @@ func TestPostgresRepo_Get(t *testing.T) {
 
 	repo := source.NewPostgresRepo(db)
 
-	rows := sqlmock.NewRows([]string{"id", "type", "url", "status", "max_depth", "exclusions", "name"}).
-		AddRow("id1", "web", "http://example.com", "active", 2, "{}", "Test")
+	rows := sqlmock.NewRows([]string{"id", "type", "url", "status", "max_depth", "exclusions", "name", "updated_at"}).
+		AddRow("id1", "web", "http://example.com", "active", 2, "{}", "Test", "2024-01-01T00:00:00Z")
 
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, type, url, status, max_depth, exclusions, name FROM sources WHERE id = $1 AND deleted_at IS NULL`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, type, url, status, max_depth, exclusions, name, updated_at FROM sources WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("id1").
 		WillReturnRows(rows)
 
@@ -55,4 +55,5 @@ func TestPostgresRepo_Get(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "id1", s.ID)
 	assert.Equal(t, "Test", s.Name)
+	assert.Equal(t, "2024-01-01T00:00:00Z", s.UpdatedAt)
 }
