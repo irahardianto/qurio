@@ -16,15 +16,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev libxslt-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user
+RUN useradd -m appuser
+
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
-RUN playwright install --with-deps chromium
+# Install Playwright browsers (as root)
+RUN playwright install --with-deps chromium && \
+    chmod -R 777 /ms-playwright
 
 COPY . .
+
+# Set ownership and create upload dir
+RUN mkdir -p /var/lib/qurio/uploads && \
+    chown -R appuser:appuser /var/lib/qurio && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Pre-download models to prevent runtime race conditions in workers
 # We set strict threading limits globally to be safe
@@ -37,8 +49,7 @@ ENV VECLIB_MAXIMUM_THREADS=2
 ENV NUMEXPR_NUM_THREADS=2
 ENV ONNX_NUM_THREADS=1
 
-# Trigger model download during build
+# Trigger model download during build (as appuser)
 RUN python -c "from docling.utils.model_downloader import download_models; download_models()"
 
 CMD ["python", "main.py"]
-
