@@ -10,6 +10,14 @@ Weaviate client calls `/v1/meta` or `/v1/.well-known/ready` on startup. The mock
 **Pattern:** When `Service` is a concrete struct but uses a `Repository` interface, create a `MockRepository` struct in the test package.
 This avoids complex refactoring while allowing full isolation of the Service logic.
 
+### Sequential Mock Returns (Go)
+**Pattern:** When a method is called multiple times with different return values (e.g., key rotation), `testify/mock` can be tricky with `mock.Anything`.
+**Solution:** Use a "Manual Mock" struct with an internal counter to return sequence-specific values cleanly, or reset the mock state between assertions if possible.
+
+### Decoupling Main (Go)
+**Pattern:** To test application wiring (`main.go`), move the wiring logic into a `New(deps...)` function in an `internal/app` package.
+**Benefit:** Allows unit testing of the router/handler setup without spinning up the full binary or real infrastructure.
+
 ## 2. Frontend Testing Patterns (Vue/Vitest)
 
 ### Store Testing (Pinia)

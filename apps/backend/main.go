@@ -5,25 +5,15 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"qurio/apps/backend/internal/logger"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
-	"qurio/apps/backend/features/mcp"
-	"qurio/apps/backend/features/source"
-	"qurio/apps/backend/features/job"
-	"qurio/apps/backend/features/stats"
-	"qurio/apps/backend/internal/adapter/gemini"
-	"qurio/apps/backend/internal/adapter/reranker"
-	wstore "qurio/apps/backend/internal/adapter/weaviate"
+	"qurio/apps/backend/internal/app"
 	"qurio/apps/backend/internal/config"
-	"qurio/apps/backend/internal/retrieval"
+	"qurio/apps/backend/internal/logger"
 	"qurio/apps/backend/internal/vector"
-	"qurio/apps/backend/internal/settings"
-	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/middleware"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -119,9 +109,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 5. Initialize Adapters & Services
-	vecStore := wstore.NewStore(wClient)
-
 	// NSQ Producer
 	nsqCfg := nsq.NewConfig()
 	nsqProducer, err := nsq.NewProducer(cfg.NSQDHost, nsqCfg)
@@ -168,86 +155,14 @@ func main() {
 		}
 	}()
 
-	// Feature: Settings
-	settingsRepo := settings.NewPostgresRepo(db)
-	settingsService := settings.NewService(settingsRepo)
-	settingsHandler := settings.NewHandler(settingsService)
-
-	// Feature: Source
-	sourceRepo := source.NewPostgresRepo(db)
-	sourceService := source.NewService(sourceRepo, nsqProducer, vecStore, settingsService)
-	sourceHandler := source.NewHandler(sourceService)
-
-	// Feature: Job
-	jobRepo := job.NewPostgresRepo(db)
-	jobService := job.NewService(jobRepo, nsqProducer, logger)
-	jobHandler := job.NewHandler(jobService)
-
-	// Feature: Stats
-	statsHandler := stats.NewHandler(sourceRepo, jobRepo, vecStore)
-
-	// Adapters: Dynamic
-	geminiEmbedder := gemini.NewDynamicEmbedder(settingsService)
-	rerankerClient := reranker.NewDynamicClient(settingsService)
-
-	// Middleware: CORS
-	enableCORS := func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			next(w, r)
-		}
-	}
-
-	// Routes
-	http.Handle("POST /sources", middleware.CorrelationID(enableCORS(sourceHandler.Create)))
-	http.Handle("POST /sources/upload", middleware.CorrelationID(enableCORS(sourceHandler.Upload)))
-	http.Handle("GET /sources", middleware.CorrelationID(enableCORS(sourceHandler.List)))
-	http.Handle("GET /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Get)))
-	http.Handle("DELETE /sources/{id}", middleware.CorrelationID(enableCORS(sourceHandler.Delete)))
-	http.Handle("POST /sources/{id}/resync", middleware.CorrelationID(enableCORS(sourceHandler.ReSync)))
-	http.Handle("GET /sources/{id}/pages", middleware.CorrelationID(enableCORS(sourceHandler.GetPages)))
-
-	http.Handle("GET /settings", middleware.CorrelationID(enableCORS(settingsHandler.GetSettings)))
-	http.Handle("PUT /settings", middleware.CorrelationID(enableCORS(settingsHandler.UpdateSettings)))
-
-	http.Handle("GET /jobs/failed", middleware.CorrelationID(enableCORS(jobHandler.List)))
-	http.Handle("POST /jobs/{id}/retry", middleware.CorrelationID(enableCORS(jobHandler.Retry)))
-
-	http.Handle("GET /stats", middleware.CorrelationID(enableCORS(statsHandler.GetStats)))
-
-	// Feature: Retrieval & MCP
-	queryLogger, err := retrieval.NewFileQueryLogger("data/logs/query.log")
+	// 5. Initialize App
+	application, err := app.New(cfg, db, wClient, nsqProducer, logger)
 	if err != nil {
-		slog.Warn("failed to create query logger, falling back to stdout", "error", err)
-		queryLogger = retrieval.NewQueryLogger(os.Stdout)
+		slog.Error("failed to initialize app", "error", err)
+		os.Exit(1)
 	}
 
-	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, settingsService, queryLogger)
-	mcpHandler := mcp.NewHandler(retrievalService, sourceService)
-	http.Handle("/mcp", middleware.CorrelationID(mcpHandler)) // Legacy POST endpoint
-	
-	// New SSE Endpoints
-	http.Handle("GET /mcp/sse", middleware.CorrelationID(enableCORS(mcpHandler.HandleSSE)))
-	http.Handle("POST /mcp/messages", middleware.CorrelationID(enableCORS(mcpHandler.HandleMessage)))
-
-	// Worker (Result Consumer)
-	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo, settings: settingsService}
-	pmAdapter := &pageManagerAdapter{repo: sourceRepo}
-	
-	// Ingestion Concurrency
-	if cfg.IngestionConcurrency < 1 {
-		cfg.IngestionConcurrency = 1
-	}
-	
-	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, nsqProducer)
-	
+	// 6. Worker (Result Consumer) Setup
 	nsqCfg = nsq.NewConfig()
 	consumer, err := nsq.NewConsumer("ingest.result", "backend", nsqCfg)
 	if err != nil {
@@ -255,7 +170,7 @@ func main() {
 	} else {
 		// Use AddConcurrentHandlers
 		consumer.AddConcurrentHandlers(nsq.HandlerFunc(func(m *nsq.Message) error {
-			return resultConsumer.HandleMessage(m)
+			return application.ResultConsumer.HandleMessage(m)
 		}), cfg.IngestionConcurrency)
 		
 		// Connect to Lookupd
@@ -273,79 +188,17 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := sourceService.ResetStuckPages(context.Background()); err != nil {
+				if err := application.SourceService.ResetStuckPages(context.Background()); err != nil {
 					slog.Error("failed to reset stuck pages", "error", err)
 				}
 			}
 		}
 	}()
 
-	// 6. Start Server
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	})
-
+	// 7. Start Server
 	slog.Info("server starting", "port", 8081)
-	if err := http.ListenAndServe(":8081", nil); err != nil {
+	if err := http.ListenAndServe(":8081", application.Handler); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
-}
-
-// Adapter for SourceFetcher in Worker
-type sourceFetcherAdapter struct {
-	repo     source.Repository
-	settings source.SettingsService
-}
-
-func (a *sourceFetcherAdapter) GetSourceDetails(ctx context.Context, id string) (string, string, error) {
-	s, err := a.repo.Get(ctx, id)
-	if err != nil {
-		return "", "", err
-	}
-	return s.Type, s.URL, nil
-}
-
-func (a *sourceFetcherAdapter) GetSourceConfig(ctx context.Context, id string) (int, []string, string, string, error) {
-	s, err := a.repo.Get(ctx, id)
-	if err != nil {
-		return 0, nil, "", "", err
-	}
-	
-	set, err := a.settings.Get(ctx)
-	apiKey := ""
-	if err == nil && set != nil {
-		apiKey = set.GeminiAPIKey
-	}
-	
-	return s.MaxDepth, s.Exclusions, apiKey, s.Name, nil
-}
-
-// Adapter for PageManager
-type pageManagerAdapter struct {
-	repo source.Repository
-}
-
-func (a *pageManagerAdapter) BulkCreatePages(ctx context.Context, pages []worker.PageDTO) ([]string, error) {
-	// Convert worker.PageDTO to source.SourcePage
-	var srcPages []source.SourcePage
-	for _, p := range pages {
-		srcPages = append(srcPages, source.SourcePage{
-			SourceID: p.SourceID,
-			URL:      p.URL,
-			Status:   p.Status,
-			Depth:    p.Depth,
-		})
-	}
-	return a.repo.BulkCreatePages(ctx, srcPages)
-}
-
-func (a *pageManagerAdapter) UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error {
-	return a.repo.UpdatePageStatus(ctx, sourceID, url, status, err)
-}
-
-func (a *pageManagerAdapter) CountPendingPages(ctx context.Context, sourceID string) (int, error) {
-	return a.repo.CountPendingPages(ctx, sourceID)
 }

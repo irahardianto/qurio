@@ -125,4 +125,38 @@ describe('SourceForm', () => {
 
     expect(wrapper.text()).toContain('Something went wrong')
   })
+
+  it('validates empty url', async () => {
+    const wrapper = mount(SourceForm, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: globalStubs
+      }
+    })
+    
+    // Default tab is Web, so just submit empty
+    await wrapper.find('form').trigger('submit')
+    
+    // Check that store was NOT called
+    const store = useSourceStore()
+    expect(store.addSource).not.toHaveBeenCalled()
+  })
+
+  it('resets form after success', async () => {
+    const wrapper = mount(SourceForm, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: globalStubs
+      }
+    })
+    const store = useSourceStore()
+    store.addSource.mockResolvedValue()
+    
+    await wrapper.find('input[type="text"]').setValue('http://example.com')
+    await wrapper.find('form').trigger('submit')
+    
+    expect(store.addSource).toHaveBeenCalled()
+    // Verify input cleared
+    expect(wrapper.find('input[type="text"]').element.value).toBe('')
+  })
 })

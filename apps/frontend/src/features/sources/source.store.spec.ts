@@ -143,6 +143,21 @@ describe('Source Store', () => {
     expect(result).toEqual(mockData)
   })
 
+  it('getSource handles error gracefully', async () => {
+    const store = useSourceStore()
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: async () => ({})
+    })
+
+    const result = await store.getSource('missing')
+    expect(result).toBeNull()
+    expect(store.error).toContain('Failed to fetch source')
+  })
+
   it('getSourcePages fetches pages', async () => {
     const store = useSourceStore()
     const mockPages = [{ id: 'p1', url: 'http://u.rl' }]

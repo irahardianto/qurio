@@ -116,3 +116,64 @@ async def test_handle_web_task_failure():
     with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
         with pytest.raises(Exception, match="Crawl failed: Failed"):
             await handle_web_task("http://example.com")
+
+@pytest.mark.asyncio
+async def test_handle_web_task_internal_links():
+    # Mock result with mixed links
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content"
+    mock_result.url = "http://example.com/page1"
+    mock_result.links = {
+        'internal': [
+            {'href': 'http://example.com/page2'},
+            {'href': 'http://example.com/page1#section'}
+        ],
+        'external': [{'href': 'http://google.com'}]
+    }
+    
+    # Mock crawler
+    mock_crawler = MagicMock()
+    f = asyncio.Future()
+    f.set_result(mock_result)
+    mock_crawler.arun.return_value = f
+    
+    mock_crawler_cm = AsyncMock()
+    mock_crawler_cm.__aenter__.return_value = mock_crawler
+    mock_crawler_cm.__aexit__.return_value = None
+    
+    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm):
+        result = await handle_web_task("http://example.com/page1")
+        
+        links = result[0]["links"]
+        assert "http://example.com/page2" in links
+        assert "http://google.com" not in links
+
+@pytest.mark.asyncio
+async def test_handle_web_task_auth_precedence():
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = ""
+    mock_result.url = "http://example.com"
+    mock_result.links = {}
+
+    mock_crawler = MagicMock()
+    f = asyncio.Future()
+    f.set_result(mock_result)
+    mock_crawler.arun.return_value = f
+    
+    mock_crawler_cm = AsyncMock()
+    mock_crawler_cm.__aenter__.return_value = mock_crawler
+    mock_crawler_cm.__aexit__.return_value = None
+
+    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm):
+        with patch('handlers.web.LLMConfig') as MockLLMConfig:
+             await handle_web_task("http://example.com", api_key="custom-key")
+             
+             # Verify LLMConfig initialized with custom key
+             MockLLMConfig.assert_called_with(
+                provider="gemini/gemini-3-flash-preview",
+                api_token="custom-key",
+                temperature=1.0
+             )
+

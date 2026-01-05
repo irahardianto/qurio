@@ -21,8 +21,21 @@ import {
 
 const store = useSettingsStore()
 
-onMounted(() => {
-  store.fetchSettings()
+const handleUpdateSettings = async () => {
+  try {
+    await store.updateSettings()
+  } catch (error) {
+    // Error is handled in store state usually, but catching here prevents unhandled rejection
+    console.error('Update failed', error)
+  }
+}
+
+onMounted(async () => {
+  try {
+    await store.fetchSettings()
+  } catch (error) {
+    console.error('Fetch failed', error)
+  }
 })
 </script>
 
@@ -143,7 +156,7 @@ onMounted(() => {
 
     <Button 
       :disabled="store.isLoading" 
-      @click="store.updateSettings"
+      @click="handleUpdateSettings"
       class="w-full sm:w-auto"
     >
       <Loader2
