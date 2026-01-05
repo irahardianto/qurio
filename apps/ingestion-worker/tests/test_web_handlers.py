@@ -29,6 +29,11 @@ markdown_generation_strategy.DefaultMarkdownGenerator = MagicMock()
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch, ANY
 import asyncio
+
+# Ensure we get the real module, not a mock from test_main_integration
+if 'handlers.web' in sys.modules:
+    del sys.modules['handlers.web']
+
 from handlers.web import handle_web_task
 
 @pytest.mark.asyncio
@@ -41,8 +46,10 @@ async def test_handle_web_task_returns_title():
     mock_result.links = {'internal': []}
     
     # Mock crawler
-    mock_crawler = AsyncMock()
-    mock_crawler.arun.return_value = mock_result
+    mock_crawler = MagicMock()
+    f = asyncio.Future()
+    f.set_result(mock_result)
+    mock_crawler.arun.return_value = f
     
     # Context manager mock
     mock_crawler_cm = AsyncMock()
@@ -68,8 +75,10 @@ async def test_handle_web_task_success():
     mock_result.links = {'internal': []}
     
     # Mock crawler
-    mock_crawler = AsyncMock()
-    mock_crawler.arun.return_value = mock_result
+    mock_crawler = MagicMock()
+    f = asyncio.Future()
+    f.set_result(mock_result)
+    mock_crawler.arun.return_value = f
     
     # Context manager mock
     mock_crawler_cm = AsyncMock()
@@ -94,8 +103,10 @@ async def test_handle_web_task_failure():
     mock_result.error_message = "Failed"
     
     # Mock crawler
-    mock_crawler = AsyncMock()
-    mock_crawler.arun.return_value = mock_result
+    mock_crawler = MagicMock()
+    f = asyncio.Future()
+    f.set_result(mock_result)
+    mock_crawler.arun.return_value = f
     
     # Context manager mock
     mock_crawler_cm = AsyncMock()

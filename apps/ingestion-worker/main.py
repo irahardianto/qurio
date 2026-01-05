@@ -127,6 +127,7 @@ async def process_message(message):
             fail_payload = {
                 "source_id": source_id,
                 "status": "failed",
+                "code": error_code,
                 "error": f"[{e.code}] {e}",
                 "url": data.get('url', '') or data.get('path', ''),
                 "original_payload": data

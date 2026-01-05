@@ -64,5 +64,5 @@ async def test_process_message_failure():
         args, kwargs = main.producer.pub.call_args
         payload = json.loads(args[1])
         assert payload['status'] == "failed"
-        assert payload['error']['code'] == ERR_ENCRYPTED
-        assert payload['error']['message'] == "Encrypted"
+        assert payload['code'] == ERR_ENCRYPTED
+        assert payload['error'] == "[ERR_ENCRYPTED] Encrypted"
