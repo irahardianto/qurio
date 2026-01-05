@@ -2,6 +2,7 @@ package reranker_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,36 +11,55 @@ import (
 	"qurio/apps/backend/internal/adapter/reranker"
 )
 
-func TestRerank_Mock(t *testing.T) {
-	c := reranker.NewClient("other", "key")
-	docs := []string{"doc1", "doc2"}
-	
-	reranked, err := c.Rerank(context.Background(), "query", docs)
-	
+func TestClient_Rerank_Jina(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/rerank", r.URL.Path)
+		assert.Equal(t, "Bearer k1", r.Header.Get("Authorization"))
+		
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"results": []map[string]interface{}{
+				{"index": 1, "relevance_score": 0.9},
+				{"index": 0, "relevance_score": 0.8},
+			},
+		})
+	}))
+	defer ts.Close()
+
+	client := reranker.NewClient("jina", "k1")
+	client.SetBaseURL(ts.URL + "/v1/rerank")
+
+	indices, err := client.Rerank(context.Background(), "q", []string{"d1", "d2"})
 	assert.NoError(t, err)
-	assert.Equal(t, []int{0, 1}, reranked)
+	assert.Equal(t, []int{1, 0}, indices)
 }
 
-func TestRerank_Jina(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer test-key" {
-			w.WriteHeader(401)
-			return
-		}
+func TestClient_Rerank_Cohere(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/rerank", r.URL.Path)
+		assert.Equal(t, "Bearer k2", r.Header.Get("Authorization"))
 		
-		// Return docs reversed: B (0.9), A (0.1)
-		// Input was A, B. So index 1 is B, index 0 is A.
-		w.WriteHeader(200)
-		w.Write([]byte(`{"results": [{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.1}]}`))
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"results": []map[string]interface{}{
+				{"index": 1, "relevance_score": 0.9},
+				{"index": 0, "relevance_score": 0.8},
+			},
+		})
 	}))
-	defer server.Close()
-	
-	c := reranker.NewClient("jina", "test-key")
-	c.SetBaseURL(server.URL)
-	
-	docs := []string{"A", "B"}
-	reranked, err := c.Rerank(context.Background(), "q", docs)
-	
+	defer ts.Close()
+
+	client := reranker.NewClient("cohere", "k2")
+	client.SetBaseURL(ts.URL + "/v1/rerank")
+
+	indices, err := client.Rerank(context.Background(), "q", []string{"d1", "d2"})
 	assert.NoError(t, err)
-	assert.Equal(t, []int{1, 0}, reranked)
+	assert.Equal(t, []int{1, 0}, indices)
+}
+
+func TestClient_Rerank_None(t *testing.T) {
+	client := reranker.NewClient("none", "")
+	indices, err := client.Rerank(context.Background(), "q", []string{"d1", "d2"})
+	assert.NoError(t, err)
+	assert.Equal(t, []int{0, 1}, indices)
 }

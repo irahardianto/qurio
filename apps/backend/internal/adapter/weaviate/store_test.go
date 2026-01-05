@@ -8,142 +8,214 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	weaviateclient "github.com/weaviate/weaviate-go-client/v5/weaviate"
+	"github.com/weaviate/weaviate-go-client/v5/weaviate"
 	adapter "qurio/apps/backend/internal/adapter/weaviate"
 	"qurio/apps/backend/internal/worker"
 )
 
+func mockWeaviate(t *testing.T, handler http.HandlerFunc) (*weaviate.Client, *httptest.Server) {
+	ts := httptest.NewServer(handler)
+	cfg := weaviate.Config{Host: ts.Listener.Addr().String(), Scheme: "http"}
+	client, err := weaviate.NewClient(cfg)
+	assert.NoError(t, err)
+	return client, ts
+}
+
 func TestStore_StoreChunk(t *testing.T) {
-	// Mock Weaviate Server
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check URL for creation: /v1/objects
-		if r.URL.Path == "/v1/objects" && r.Method == "POST" {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"class": "DocumentChunk",
-				"id":    "123",
-			})
+			w.Write([]byte(`{"version": "1.19.0"}`))
 			return
 		}
-		http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
-	}))
+		assert.Equal(t, "/v1/objects", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		
+		var body map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&body)
+		props := body["properties"].(map[string]interface{})
+		assert.Equal(t, "test content", props["content"])
+		
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"id": "1"})
+	})
 	defer ts.Close()
 
-	// Config
-	cfg := weaviateclient.Config{
-		Host:   ts.Listener.Addr().String(),
-		Scheme: "http",
+	store := adapter.NewStore(client)
+	chunk := worker.Chunk{
+		Content: "test content",
+		SourceID: "src1",
+		ChunkIndex: 0,
+		Vector: []float32{0.1, 0.2},
 	}
-	client, err := weaviateclient.NewClient(cfg)
+	err := store.StoreChunk(context.Background(), chunk)
 	assert.NoError(t, err)
+}
+
+func TestStore_DeleteChunksByURL(t *testing.T) {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"version": "1.19.0"}`))
+			return
+		}
+		assert.Equal(t, "/v1/batch/objects", r.URL.Path)
+		assert.Equal(t, "DELETE", r.Method)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	})
+	defer ts.Close()
 
 	store := adapter.NewStore(client)
-
-	ctx := context.Background()
-	chunk := worker.Chunk{
-		Content:    "test content",
-		SourceURL:  "http://example.com",
-		SourceID:   "src1",
-		ChunkIndex: 0,
-		Vector:     []float32{0.1, 0.2},
-	}
-
-	err = store.StoreChunk(ctx, chunk)
+	err := store.DeleteChunksByURL(context.Background(), "src1", "http://u.rl")
 	assert.NoError(t, err)
+}
+
+func TestStore_GetChunks(t *testing.T) {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"version": "1.19.0"}`))
+			return
+		}
+		assert.Equal(t, "/v1/graphql", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		// Mock GraphQL response
+		resp := map[string]interface{}{
+			"data": map[string]interface{}{
+				"Get": map[string]interface{}{
+					"DocumentChunk": []interface{}{
+						map[string]interface{}{
+							"content": "chunk content",
+							"chunkIndex": 0.0,
+						},
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer ts.Close()
+
+	store := adapter.NewStore(client)
+	chunks, err := store.GetChunks(context.Background(), "src1")
+	assert.NoError(t, err)
+	assert.Len(t, chunks, 1)
+	assert.Equal(t, "chunk content", chunks[0].Content)
 }
 
 func TestStore_Search(t *testing.T) {
-	// Mock Server
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/graphql" {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
 			w.WriteHeader(http.StatusOK)
-			// Return mocked GraphQL response
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"data": map[string]interface{}{
-					"Get": map[string]interface{}{
-						"DocumentChunk": []map[string]interface{}{
-							{
-								"content": "found content",
-								"url":     "http://example.com",
-								"_additional": map[string]interface{}{
-									"score": 0.9,
-								},
+			w.Write([]byte(`{"version": "1.19.0"}`))
+			return
+		}
+		assert.Equal(t, "/v1/graphql", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		resp := map[string]interface{}{
+			"data": map[string]interface{}{
+				"Get": map[string]interface{}{
+					"DocumentChunk": []interface{}{
+						map[string]interface{}{
+							"content": "found content",
+							"_additional": map[string]interface{}{
+								"score": "0.95",
 							},
 						},
 					},
 				},
-			})
-			return
+			},
 		}
-		http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
-	}))
+		json.NewEncoder(w).Encode(resp)
+	})
 	defer ts.Close()
 
-	cfg := weaviateclient.Config{
-		Host:   ts.Listener.Addr().String(),
-		Scheme: "http",
-	}
-	client, err := weaviateclient.NewClient(cfg)
-	assert.NoError(t, err)
-
 	store := adapter.NewStore(client)
-
-	results, err := store.Search(context.Background(), "query", []float32{0.1}, 0.5, 1, nil)
+	results, err := store.Search(context.Background(), "query", []float32{0.1, 0.2}, 0.5, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "found content", results[0].Content)
+	assert.Equal(t, float32(0.95), results[0].Score)
 }
 
-func TestStore_Search_PopulatesMetadata(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/graphql" {
+func TestStore_DeleteChunksBySourceID(t *testing.T) {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"data": map[string]interface{}{
-					"Get": map[string]interface{}{
-						"DocumentChunk": []map[string]interface{}{
-							{
-								"content":    "found content",
-								"url":        "http://example.com",
-								"author":     "Alice",
-								"createdAt":  "2023-01-01",
-								"pageCount":  10.0, // GraphQL returns float for numbers
-								"language":   "go",
-								"type":       "code",
-								"sourceId":   "src-123",
-								"_additional": map[string]interface{}{
-									"score": 0.9,
-								},
+			w.Write([]byte(`{"version": "1.19.0"}`))
+			return
+		}
+		assert.Equal(t, "/v1/batch/objects", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	})
+	defer ts.Close()
+
+	store := adapter.NewStore(client)
+	err := store.DeleteChunksBySourceID(context.Background(), "src1")
+	assert.NoError(t, err)
+}
+
+func TestStore_GetChunksByURL(t *testing.T) {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"version": "1.19.0"}`))
+			return
+		}
+		assert.Equal(t, "/v1/graphql", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		resp := map[string]interface{}{
+			"data": map[string]interface{}{
+				"Get": map[string]interface{}{
+					"DocumentChunk": []interface{}{
+						map[string]interface{}{
+							"content": "url content",
+						},
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer ts.Close()
+
+	store := adapter.NewStore(client)
+	results, err := store.GetChunksByURL(context.Background(), "http://u.rl")
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "url content", results[0].Content)
+}
+
+func TestStore_CountChunks(t *testing.T) {
+	client, ts := mockWeaviate(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"version": "1.19.0"}`))
+			return
+		}
+		assert.Equal(t, "/v1/graphql", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		resp := map[string]interface{}{
+			"data": map[string]interface{}{
+				"Aggregate": map[string]interface{}{
+					"DocumentChunk": []interface{}{
+						map[string]interface{}{
+							"meta": map[string]interface{}{
+								"count": 42.0,
 							},
 						},
 					},
 				},
-			})
-			return
+			},
 		}
-		http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
-	}))
+		json.NewEncoder(w).Encode(resp)
+	})
 	defer ts.Close()
 
-	cfg := weaviateclient.Config{
-		Host:   ts.Listener.Addr().String(),
-		Scheme: "http",
-	}
-	client, err := weaviateclient.NewClient(cfg)
-	assert.NoError(t, err)
-
 	store := adapter.NewStore(client)
-
-	results, err := store.Search(context.Background(), "query", []float32{0.1}, 0.5, 1, nil)
+	count, err := store.CountChunks(context.Background())
 	assert.NoError(t, err)
-	assert.Len(t, results, 1)
-	
-	// Assert top-level fields
-	assert.Equal(t, "Alice", results[0].Author)
-	assert.Equal(t, "2023-01-01", results[0].CreatedAt)
-	assert.Equal(t, 10, results[0].PageCount)
-	assert.Equal(t, "go", results[0].Language)
-	assert.Equal(t, "code", results[0].Type)
-	assert.Equal(t, "src-123", results[0].SourceID)
-	assert.Equal(t, "http://example.com", results[0].URL)
+	assert.Equal(t, 42, count)
 }

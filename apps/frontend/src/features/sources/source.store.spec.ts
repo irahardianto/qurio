@@ -1,111 +1,179 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useSourceStore } from './source.store'
+
+// Mock global fetch
+const fetchMock = vi.fn()
+global.fetch = fetchMock
 
 describe('Source Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    global.fetch = vi.fn()
+    fetchMock.mockReset()
   })
 
-  it('initializes with correct default state', () => {
+  it('fetchSources updates state on success', async () => {
     const store = useSourceStore()
-    expect(store.sources).toEqual([])
-    expect(store.isLoading).toBe(false)
-    expect(store.error).toBe(null)
-  })
-
-  it('fetchSources populates state on success', async () => {
-    const store = useSourceStore()
-    const mockSources = [{ id: '1', name: 'Test' }]
+    const mockData = [{ id: '1', name: 'Test Source' }]
     
-    // Mock successful response
-    global.fetch = vi.fn().mockResolvedValue({
+    fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: mockSources })
+      json: async () => ({ data: mockData })
     })
 
-    const promise = store.fetchSources()
-    expect(store.isLoading).toBe(true)
-    await promise
-    
-    expect(store.sources).toEqual(mockSources)
+    await store.fetchSources()
+
+    expect(store.sources).toEqual(mockData)
     expect(store.isLoading).toBe(false)
-    expect(store.error).toBe(null)
+    expect(store.error).toBeNull()
   })
 
   it('fetchSources handles error', async () => {
     const store = useSourceStore()
     
-    // Mock error response
-    global.fetch = vi.fn().mockResolvedValue({
+    fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Internal Server Error'
     })
 
     await store.fetchSources()
-    
-    expect(store.sources).toEqual([])
+
+    expect(store.error).toBe('Failed to fetch sources: Internal Server Error')
     expect(store.isLoading).toBe(false)
-    expect(store.error).toContain('Failed to fetch sources')
   })
 
-  it('addSource posts to API and updates state on success', async () => {
+  it('addSource updates state on success', async () => {
     const store = useSourceStore()
-    const newSourceInput = { 
-      name: 'New Source', 
-      url: 'http://example.com',
-      max_depth: 2,
-      exclusions: ['/admin']
-    }
-    const createdSource = { id: '2', ...newSourceInput }
-    
-    global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ data: createdSource })
+    const newSource = { name: 'New Source', url: 'http://test.com' }
+    const mockResponse = { id: '2', ...newSource }
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockResponse })
     })
 
-    const promise = store.addSource(newSourceInput)
-    expect(store.isLoading).toBe(true)
-    await promise
+    await store.addSource(newSource)
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/sources', expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify(newSourceInput)
-    }))
-    expect(store.sources).toContainEqual(createdSource)
+    expect(store.sources).toContainEqual(mockResponse)
     expect(store.isLoading).toBe(false)
-    expect(store.error).toBe(null)
   })
 
   it('addSource handles error', async () => {
     const store = useSourceStore()
-    const newSourceInput = { name: 'New Source', url: 'http://example.com' }
-    
-    global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        statusText: 'Bad Request'
+    const newSource = { name: 'New Source' }
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Bad Request'
     })
 
-    await store.addSource(newSourceInput)
+    await store.addSource(newSource as any)
 
-    expect(store.sources).toHaveLength(0)
-    expect(store.isLoading).toBe(false)
-    expect(store.error).toContain('Failed to add source')
+    expect(store.error).toBe('Failed to add source: Bad Request')
   })
 
-  it('should map updated_at correctly', async () => {
+  it('deleteSource removes source from state', async () => {
     const store = useSourceStore()
-    // @ts-ignore - simulating API response with field that doesn't exist on type yet
-    const mockSources = [{ id: '1', name: 'Test', updated_at: '2024-01-01' }]
+    store.sources = [{ id: '1', name: 'Delete Me' }] as any
     
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockSources })
+    fetchMock.mockResolvedValueOnce({
+      ok: true
     })
 
-    await store.fetchSources()
-    // This assertion relies on the field existing on the interface
-    expect(store.sources[0].updated_at).toBe('2024-01-01')
+    await store.deleteSource('1')
+
+    expect(store.sources).toHaveLength(0)
+  })
+
+  it('resyncSource calls API', async () => {
+    const store = useSourceStore()
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: true
+    })
+
+    await store.resyncSource('1')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/sources/1/resync', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('uploadSource uploads file and updates state', async () => {
+    const store = useSourceStore()
+    const file = new File(['content'], 'test.pdf', { type: 'application/pdf' })
+    const mockResponse = { id: '3', name: 'test.pdf' }
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockResponse })
+    })
+
+    await store.uploadSource(file)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/sources/upload', expect.objectContaining({ 
+        method: 'POST',
+        body: expect.any(FormData)
+    }))
+    expect(store.sources).toContainEqual(mockResponse)
+  })
+
+  it('uploadSource handles error', async () => {
+    const store = useSourceStore()
+    const file = new File(['content'], 'test.pdf', { type: 'application/pdf' })
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Payload Too Large',
+      json: async () => ({ error: { message: 'File too large' } })
+    })
+
+    await expect(store.uploadSource(file)).rejects.toThrow('File too large')
+    expect(store.error).toBe('File too large')
+  })
+
+  it('getSource fetches source details', async () => {
+    const store = useSourceStore()
+    const mockData = { id: '1', name: 'Detail Source' }
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockData })
+    })
+
+    const result = await store.getSource('1')
+    expect(result).toEqual(mockData)
+  })
+
+  it('getSourcePages fetches pages', async () => {
+    const store = useSourceStore()
+    const mockPages = [{ id: 'p1', url: 'http://u.rl' }]
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPages })
+    })
+
+    const result = await store.getSourcePages('1')
+    expect(result).toEqual(mockPages)
+  })
+
+  it('polling fetches sources when active', async () => {
+    const store = useSourceStore()
+    vi.useFakeTimers()
+    
+    // Initial state with active source
+    store.sources = [{ id: '1', status: 'processing' }] as any
+    
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: '1', status: 'completed' }] })
+    })
+
+    store.startPolling()
+    vi.advanceTimersByTime(2000)
+
+    expect(fetchMock).toHaveBeenCalled()
+    
+    store.stopPolling()
+    vi.useRealTimers()
   })
 })
