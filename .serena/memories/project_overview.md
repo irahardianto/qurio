@@ -23,7 +23,7 @@ Monarch wraps task completion in strict, executable gates. It runs locally along
 *   Backend Core implemented (DB, Runner, API, Gates, Project).
 *   **Execution Engine:** Universal Docker Executor and Tool Output Parsers (Go Test, ESLint) implemented.
 *   **LLM Eval Engine:** Implemented with Gemini Pro integration, Snapshot/Diff analysis.
-*   **MCP Server:** Implemented with SSE transport, `qurio_search` (hybrid+filter), and `qurio_fetch_page`.
+*   **MCP Server:** Implemented with SSE transport, `qurio_search` (hybrid+filter+source_id), `qurio_list_sources`, `qurio_list_pages`, and `qurio_fetch_page`.
 *   **Ingestion (Qurio):** Advanced pipeline with API detection, breadcrumb extraction, and contextual embeddings.
 *   Frontend pending.
 *   **Planning:** Epic 5 (LLM Eval Engine) implementation complete.

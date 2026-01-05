@@ -229,7 +229,7 @@ func main() {
 	}
 
 	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, settingsService, queryLogger)
-	mcpHandler := mcp.NewHandler(retrievalService)
+	mcpHandler := mcp.NewHandler(retrievalService, sourceService)
 	http.Handle("/mcp", middleware.CorrelationID(mcpHandler)) // Legacy POST endpoint
 	
 	// New SSE Endpoints

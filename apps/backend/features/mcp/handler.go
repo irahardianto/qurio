@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
+	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/middleware"
 	"github.com/google/uuid"
@@ -17,15 +19,22 @@ type Retriever interface {
 	GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error)
 }
 
+type SourceManager interface {
+	List(ctx context.Context) ([]source.Source, error)
+	GetPages(ctx context.Context, id string) ([]source.SourcePage, error)
+}
+
 type Handler struct {
 	retriever    Retriever
+	sourceMgr    SourceManager
 	sessions     map[string]chan string // sessionId -> message channel (serialized JSON-RPC response)
 	sessionsLock sync.RWMutex
 }
 
-func NewHandler(r Retriever) *Handler {
+func NewHandler(r Retriever, s SourceManager) *Handler {
 	return &Handler{
 		retriever: r,
+		sourceMgr: s,
 		sessions:  make(map[string]chan string),
 	}
 }
@@ -44,10 +53,11 @@ type CallParams struct {
 }
 
 type SearchArgs struct {
-	Query   string                 `json:"query"`
-	Alpha   *float32               `json:"alpha,omitempty"`
-	Limit   *int                   `json:"limit,omitempty"`
-	Filters map[string]interface{} `json:"filters,omitempty"`
+	Query    string                 `json:"query"`
+	Alpha    *float32               `json:"alpha,omitempty"`
+	Limit    *int                   `json:"limit,omitempty"`
+	SourceID *string                `json:"source_id,omitempty"`
+	Filters  map[string]interface{} `json:"filters,omitempty"`
 }
 
 type FetchPageArgs struct {
@@ -160,12 +170,38 @@ ARGUMENT GUIDE:
 									"minimum":     1,
 									"maximum":     50,
 								},
+								"source_id": map[string]string{
+									"type":        "string",
+									"description": "Filter results by source ID",
+								},
 								"filters": map[string]interface{}{
 									"type":        "object",
 									"description": "Metadata filters (e.g. type='code', language='go')",
 								},
 							},
 							"required": []string{"query"},
+						},
+					},
+					{
+						Name:        "qurio_list_sources",
+						Description: "List available documentation sources. Returns ID, Name, and Type for each source.",
+						InputSchema: map[string]interface{}{
+							"type":       "object",
+							"properties": map[string]interface{}{},
+						},
+					},
+					{
+						Name:        "qurio_list_pages",
+						Description: "List pages for a specific source.",
+						InputSchema: map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"source_id": map[string]string{
+									"type":        "string",
+									"description": "The ID of the source",
+								},
+							},
+							"required": []string{"source_id"},
 						},
 					},
 					{
@@ -210,6 +246,13 @@ ARGUMENT GUIDE:
 				slog.Warn("invalid search arguments", "error", err)
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid search arguments")
 				return &resp
+			}
+
+			if args.SourceID != nil && *args.SourceID != "" {
+				if args.Filters == nil {
+					args.Filters = make(map[string]interface{})
+				}
+				args.Filters["sourceId"] = *args.SourceID
 			}
 
 			opts := &retrieval.SearchOptions{
@@ -266,6 +309,153 @@ ARGUMENT GUIDE:
 				Result: ToolResult{
 					Content: []ToolContent{
 						{Type: "text", Text: textResult},
+					},
+				},
+			}
+		}
+
+		if params.Name == "qurio_list_sources" {
+			sources, err := h.sourceMgr.List(ctx)
+			if err != nil {
+				slog.Error("list_sources failed", "error", err)
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{{Type: "text", Text: "Error: " + err.Error()}},
+						IsError: true,
+					},
+				}
+			}
+
+			if len(sources) == 0 {
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{
+							{Type: "text", Text: "No sources found."},
+						},
+					},
+				}
+			}
+
+			type SimpleSource struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+				Type string `json:"type"`
+			}
+			
+			simpleSources := make([]SimpleSource, len(sources))
+			for i, s := range sources {
+				name := s.Name
+				if name == "" {
+					name = s.URL
+				}
+				simpleSources[i] = SimpleSource{
+					ID:   s.ID,
+					Name: name,
+					Type: s.Type,
+				}
+			}
+
+			jsonBytes, err := json.MarshalIndent(simpleSources, "", "  ")
+			if err != nil {
+				slog.Error("failed to marshal sources", "error", err)
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{{Type: "text", Text: "Error marshalling results"}},
+						IsError: true,
+					},
+				}
+			}
+
+			return &JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: ToolResult{
+					Content: []ToolContent{
+						{Type: "text", Text: string(jsonBytes)},
+					},
+				},
+			}
+		}
+
+		if params.Name == "qurio_list_pages" {
+			type ListPagesArgs struct {
+				SourceID string `json:"source_id"`
+			}
+			var args ListPagesArgs
+			if err := json.Unmarshal(params.Arguments, &args); err != nil {
+				slog.Error("invalid arguments for list_pages", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
+				return &resp
+			}
+			
+			if args.SourceID == "" {
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "source_id is required")
+				return &resp
+			}
+
+			pages, err := h.sourceMgr.GetPages(ctx, args.SourceID)
+			if err != nil {
+				slog.Error("list_pages failed", "error", err)
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{{Type: "text", Text: "Error: " + err.Error()}},
+						IsError: true,
+					},
+				}
+			}
+
+			if len(pages) == 0 {
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{
+							{Type: "text", Text: "No pages found for source."},
+						},
+					},
+				}
+			}
+
+			type SimplePage struct {
+				ID  string `json:"id"`
+				URL string `json:"url"`
+			}
+			
+			simplePages := make([]SimplePage, len(pages))
+			for i, p := range pages {
+				simplePages[i] = SimplePage{
+					ID:  p.ID,
+					URL: p.URL,
+				}
+			}
+
+			jsonBytes, err := json.MarshalIndent(simplePages, "", "  ")
+			if err != nil {
+				slog.Error("failed to marshal pages", "error", err)
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{{Type: "text", Text: "Error marshalling results"}},
+						IsError: true,
+					},
+				}
+			}
+
+			return &JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: ToolResult{
+					Content: []ToolContent{
+						{Type: "text", Text: string(jsonBytes)},
 					},
 				},
 			}
@@ -377,7 +567,7 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Create Session
 	sessionID := uuid.New().String()
-	msgChan := make(chan string, 10) // Buffer for pending messages
+	msgChan := make(chan string, 100) // Increased buffer to prevent drops
 
 	h.sessionsLock.Lock()
 	h.sessions[sessionID] = msgChan
@@ -410,6 +600,9 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.(http.Flusher).Flush()
 
 	// 4. Loop: Send messages from channel to SSE stream
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case msg, ok := <-msgChan:
@@ -417,6 +610,10 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
+			w.(http.Flusher).Flush()
+		case <-ticker.C:
+			// Send keep-alive comment to prevent timeouts
+			fmt.Fprintf(w, ": keepalive\n\n")
 			w.(http.Flusher).Flush()
 		case <-r.Context().Done():
 			return

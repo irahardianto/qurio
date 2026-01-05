@@ -31,7 +31,7 @@ func (m *MockRetriever) GetChunksByURL(ctx context.Context, url string) ([]retri
 
 func TestToolsList_ReturnsQurioTools(t *testing.T) {
     mockRetriever := new(MockRetriever)
-    handler := NewHandler(mockRetriever)
+    handler := NewHandler(mockRetriever, new(MockSourceManager))
 
     reqBody := `{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}`
     // Note: processRequest is internal, but we can test ServeHTTP or simulate it. 
@@ -59,7 +59,7 @@ func TestToolsList_ReturnsQurioTools(t *testing.T) {
 func TestHandleMessage_ContextPropagation(t *testing.T) {
     // Setup
     mockRetriever := new(MockRetriever)
-    handler := NewHandler(mockRetriever)
+    handler := NewHandler(mockRetriever, new(MockSourceManager))
     
     // Create a session
     wSSE := httptest.NewRecorder()
@@ -113,7 +113,7 @@ func TestHandleMessage_ContextPropagation(t *testing.T) {
 
 func TestToolsCall_FetchPage(t *testing.T) {
     mockRetriever := new(MockRetriever)
-    handler := NewHandler(mockRetriever)
+    handler := NewHandler(mockRetriever, new(MockSourceManager))
 
     url := "http://example.com"
     mockRetriever.On("GetChunksByURL", mock.Anything, url).Return([]retrieval.SearchResult{
