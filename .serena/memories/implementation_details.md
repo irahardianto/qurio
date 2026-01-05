@@ -1,8 +1,3 @@
-Plan updated with clean formatting and explicit target descriptions.
-`qurio_list_pages` uses `source_id`.
-`qurio_read_page` uses `url`.
-Full argument guide included for `qurio_search`.
-
-## Ingestion Worker
-- `handle_file_task` now returns `list[dict]` (standardized with `handle_web_task`) to simplify `main.py` logic.
-- Metadata (Title, Author, PageCount) is extracted via Docling v2 and passed to backend.
+- **Logging:** Implemented `apps/backend/internal/logger` package with `ContextHandler` to automatically propagate `correlation_id` from context to JSON logs.
+- **Worker Logic:** Link discovery logic extracted to pure function `DiscoverLinks` in `apps/backend/internal/worker/link_discovery.go` to separate I/O from business logic.
+- **MCP Errors:** `qurio_search` now returns standard JSON-RPC errors (code -32603) for internal failures instead of embedded text errors.

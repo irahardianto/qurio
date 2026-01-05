@@ -51,3 +51,9 @@ Qurio exposes its knowledge base via the Model Context Protocol (MCP).
 
 ## Context Propagation
 All tools propagate `correlationId` from the request to internal services for traceability.
+
+## Error Handling
+Tools return standard JSON-RPC 2.0 errors for internal failures (e.g., database connection issues, search failures).
+- **Code:** -32603 (Internal Error)
+- **Message:** Human-readable error description.
+- **Data:** (Optional) Additional context.

@@ -277,14 +277,8 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 			results, err := h.retriever.Search(ctx, args.Query, opts)
 			if err != nil {
 				slog.Error("search failed", "error", err)
-				return &JSONRPCResponse{
-					JSONRPC: "2.0",
-					ID:      req.ID,
-					Result: ToolResult{
-						Content: []ToolContent{{Type: "text", Text: "Error: " + err.Error()}},
-						IsError: true,
-					},
-				}
+				resp := makeErrorResponse(req.ID, ErrInternal, "Search failed: "+err.Error())
+				return &resp
 			}
 			
 			var textResult string

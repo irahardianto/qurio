@@ -21,6 +21,7 @@
 
 ## Code Quality & Testing
 - **Backend Coverage:** High (>90%) for core adapters (`gemini`, `weaviate`) and repositories (`settings`, `source`).
+- **Observability:** Context-aware JSON logging standardized across Backend and Adapters.
 - **Frontend Quality:** Full store and component testing coverage for `jobs`, `stats`, `sources`, and `settings`.
 - **Standards:** STRICT adherence to `technical-constitution` (Dependency Injection, Interface-based design).
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"qurio/apps/backend/internal/logger"
 	"net"
 	"net/http"
 	"os"
@@ -34,7 +35,7 @@ import (
 
 func main() {
 	// Initialize structured logger
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := slog.New(logger.NewContextHandler(slog.NewJSONHandler(os.Stdout, nil)))
 	slog.SetDefault(logger)
 
 	// 1. Load Config

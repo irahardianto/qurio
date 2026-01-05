@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -218,46 +217,11 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	// 4. Distributed Crawl: Link Discovery
 	if payload.URL != "" && len(payload.Links) > 0 {
-		if payload.Depth < maxDepth {
-			var newPages []PageDTO
-			seen := make(map[string]bool)
-			
+		{
 			u, _ := url.Parse(payload.URL)
 			host := u.Host
-			
-			for _, link := range payload.Links {
-				// 1. External Check
-				linkU, err := url.Parse(link)
-				if err != nil || linkU.Host != host {
-					continue
-				}
 
-				// Normalize URL: Strip Fragment
-				linkU.Fragment = ""
-				normalizedLink := linkU.String()
-				
-				// 2. Exclusion Check
-			excluded := false
-			for _, ex := range exclusions {
-				if matched, _ := regexp.MatchString(ex, normalizedLink); matched {
-					excluded = true
-					break
-				}
-			}
-			if excluded {
-				continue
-			}
-			
-			if seen[normalizedLink] { continue }
-			seen[normalizedLink] = true
-			
-				newPages = append(newPages, PageDTO{
-					SourceID: payload.SourceID,
-					URL:      normalizedLink,
-					Status:   "pending",
-					Depth:    payload.Depth + 1,
-				})
-			}
+			newPages := DiscoverLinks(payload.SourceID, host, payload.Links, payload.Depth, maxDepth, exclusions)
 			
 			if len(newPages) > 0 {
 				newURLs, err := h.pageManager.BulkCreatePages(ctx, newPages)

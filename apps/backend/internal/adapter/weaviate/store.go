@@ -3,6 +3,7 @@ package weaviate
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/worker"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
@@ -19,6 +20,7 @@ func NewStore(client *weaviate.Client) *Store {
 }
 
 func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
+	slog.DebugContext(ctx, "storing chunk", "source_id", chunk.SourceID, "chunk_index", chunk.ChunkIndex, "url", chunk.SourceURL)
 	properties := map[string]interface{}{
 		"content":    chunk.Content,
 		"url":        chunk.SourceURL,
@@ -53,6 +55,9 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 		WithProperties(properties).
 		WithVector(chunk.Vector).
 		Do(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to store chunk", "error", err, "source_id", chunk.SourceID, "chunk_index", chunk.ChunkIndex)
+	}
 	return err
 }
 
@@ -89,6 +94,7 @@ func (s *Store) DeleteChunksBySourceID(ctx context.Context, sourceID string) err
 }
 
 func (s *Store) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int, searchFilters map[string]interface{}) ([]retrieval.SearchResult, error) {
+	slog.DebugContext(ctx, "searching vector store", "query", query, "alpha", alpha, "limit", limit)
 	hybrid := s.client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
 		WithVector(vector).
@@ -136,6 +142,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 
 	res, err := queryBuilder.Do(ctx)
 	if err != nil {
+		slog.ErrorContext(ctx, "search failed", "error", err)
 		return nil, err
 	}
 	
