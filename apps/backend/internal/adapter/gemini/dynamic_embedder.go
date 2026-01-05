@@ -15,10 +15,14 @@ type DynamicEmbedder struct {
 	client      *genai.Client
 	currentKey  string
 	mu          sync.RWMutex
+	clientOpts  []option.ClientOption
 }
 
-func NewDynamicEmbedder(svc *settings.Service) *DynamicEmbedder {
-	return &DynamicEmbedder{settingsSvc: svc}
+func NewDynamicEmbedder(svc *settings.Service, opts ...option.ClientOption) *DynamicEmbedder {
+	return &DynamicEmbedder{
+		settingsSvc: svc,
+		clientOpts:  opts,
+	}
 }
 
 func (e *DynamicEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
@@ -69,7 +73,8 @@ func (e *DynamicEmbedder) getClient(ctx context.Context, key string) (*genai.Cli
 		e.client.Close()
 	}
 
-	client, err := genai.NewClient(ctx, option.WithAPIKey(key))
+	opts := append(e.clientOpts, option.WithAPIKey(key))
+	client, err := genai.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}

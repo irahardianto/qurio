@@ -26,9 +26,11 @@
 
 ## 📖 About
 
-**Qurio** is a self-hosted, open-source ingestion and retrieval engine that functions as a local **Shared Library** for AI agents (like Cursor, Windsurf, or custom scripts). 
+**Qurio** is a self-hosted, open-source ingestion and retrieval engine that functions as a local **Shared Library** for AI coding assistants (like Gemini-CLI, Claude Code, Cursor, Windsurf, or custom scripts).
 
-Unlike cloud-based RAG solutions that introduce latency and privacy risks, Qurio runs locally to ingest your **handpicked** heterogeneous documentation (web crawls, PDFs, Markdown) and serves it directly to your IDE via the **Model Context Protocol (MCP)**. This ensures your AI writes better code faster using only the context you trust.
+Unlike cloud-based RAG solutions that introduce latency and privacy risks, Qurio runs locally to ingest your **handpicked** heterogeneous documentation (web crawls, PDFs, Markdown) and serves it directly to your agents via the **Model Context Protocol (MCP)**. This ensures your AI writes better code faster using only the context you trust.
+
+Qurio features a custom structural chunker that respects code blocks, API definitions, and config files, preserving full code blocks and syntaxes.
 
 ### Why Qurio?
 *   **Privacy First:** Your data stays on your machine (`localhost`).

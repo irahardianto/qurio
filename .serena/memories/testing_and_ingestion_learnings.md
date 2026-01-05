@@ -1,5 +1,5 @@
 # Key Learnings: Ingestion Testing & Weaviate Patterns
-*Derived from the "Idempotency/Re-sync" investigation (Dec 2025)*
+*Derived from the "Idempotency/Re-sync" investigation (Dec 2025) and Unit Test Coverage Drive (Jan 2026)*
 
 ## 1. E2E Testing Strategies
 
@@ -35,6 +35,9 @@ await expect(async () => {
 **Observation:** There was a fear that `tokenization: "word"` (Weaviate default) would break exact filtering for UUID strings (e.g., `sourceId`).
 **Learning:** Weaviate's `Equal` operator **successfully handles exact matches** for UUIDs and URL strings even with `word` tokenization. It does not require changing the schema to `field` tokenization for standard UUID filtering.
 
+### Unit Testing with Mock Servers
+**Learning:** For Weaviate adapter testing, using `httptest.NewServer` to mock `GET /v1/graphql` and `POST /v1/objects` provides reliable, fast verification of graphQL query construction and response parsing without requiring a live Weaviate instance.
+
 ## 3. Backend Implementation
 
 ### Validation Error Visibility
@@ -51,3 +54,14 @@ await expect(async () => {
 
 **Problem (Crawl Timeout):** Large single-page documentation files (like `llms-full.txt`) frequently timed out with the default 120s limit.
 **Fix:** Increase specific operation timeouts (to 300s+) for web crawling tasks to accommodate large payloads.
+
+## 4. Test Coverage & Tooling (Jan 2026)
+
+### Standardized Mocking Patterns
+- **Backend (Go):** Standardized on `stretchr/testify` for assertions and mocks. `go-sqlmock` is essential for testing repositories without spinning up Postgres containers.
+- **Frontend (Vue/Pinia):** Standardized on `@pinia/testing` with `createTestingPinia({ createSpy: vi.fn })` to isolate store logic from component rendering.
+- **Ingestion (Python):** `pytest` is used with `unittest.mock`. Note: `pebble` is a required dependency for the multi-process worker environment.
+
+### Coverage Gaps Resolved
+- **Backend:** `internal/adapter/gemini`, `internal/adapter/weaviate`, `internal/settings`, `features/source`.
+- **Frontend:** `features/jobs` store, `features/stats` store.

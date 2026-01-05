@@ -4,4 +4,4 @@
 - **AI/LLM:** Google Gemini (Model: `gemini-3-flash-preview`)
 - **Search:** Hybrid Search (Keyword + Vector) with dynamic Alpha tuning
 - **Testing:** Playwright (E2E/Integration), Go Test (Unit), Pytest (Worker Unit)
-- **Infrastructure:** Docker Compose
+- **Infrastructure:** Docker Compose (Rootless Containers), Nginx (Non-root port 8080)

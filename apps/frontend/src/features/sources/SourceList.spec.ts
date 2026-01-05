@@ -31,7 +31,7 @@ describe('SourceList', () => {
     
     await wrapper.vm.$nextTick()
     
-    const deleteBtn = wrapper.find('.btn-icon.delete')
+    const deleteBtn = wrapper.find('button[title="Delete"]')
     await deleteBtn.trigger('click')
     
     expect(window.confirm).toHaveBeenCalled()

@@ -23,7 +23,10 @@ describe('Settings.vue', () => {
     })
     const store = useSettingsStore()
     
-    await wrapper.find('button').trigger('click')
+    // Find the save button (last button or by text)
+    const buttons = wrapper.findAll('button')
+    const saveBtn = buttons.find(b => b.text().includes('Save Configuration'))
+    await saveBtn?.trigger('click')
     expect(store.updateSettings).toHaveBeenCalled()
   })
 

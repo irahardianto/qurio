@@ -8,9 +8,23 @@ COPY . .
 RUN go build -o /server main.go
 
 FROM alpine:latest
-WORKDIR /root/
+
+# Create a non-root user
+RUN adduser -D -g '' appuser
+
+WORKDIR /app
+
+# Copy binary and migrations
 COPY --from=builder /server .
 COPY migrations ./migrations
+
+# Set permissions and create upload dir
+RUN mkdir -p /var/lib/qurio/uploads && \
+    chown -R appuser:appuser /var/lib/qurio && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 EXPOSE 8081
 CMD ["./server"]

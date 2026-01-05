@@ -22,7 +22,7 @@ describe('Source Store', () => {
     // Mock successful response
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(mockSources)
+      json: () => Promise.resolve({ data: mockSources })
     })
 
     const promise = store.fetchSources()
@@ -62,7 +62,7 @@ describe('Source Store', () => {
     
     global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(createdSource)
+        json: () => Promise.resolve({ data: createdSource })
     })
 
     const promise = store.addSource(newSourceInput)
