@@ -1,0 +1,78 @@
+name: Test and Coverage
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ "main" ]
+  schedule:
+    - cron: '45 2 * * 5'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- GO SECTION ---
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Test Go
+        run: go test -v -coverprofile=coverage-go.out ./...
+        working-directory: ./apps/backend
+
+      - name: Upload Go Coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./apps/backend/coverage-go.out
+          flags: backend
+          fail_ci_if_error: true
+
+      # --- PYTHON SECTION ---
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+        working-directory: ./apps/ingestion-worker
+
+      - name: Test Python
+        run: pytest --cov=./ --cov-report=xml:coverage-python.xml
+        working-directory: ./apps/ingestion-worker
+
+      - name: Upload Python Coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./apps/ingestion-worker/coverage-python.xml
+          flags: ingestion-worker
+          fail_ci_if_error: true
+
+      # --- TYPESCRIPT SECTION ---
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Node Dependencies
+        run: npm ci
+        working-directory: ./apps/frontend
+
+      - name: Test TypeScript
+        run: npm test -- --coverage
+        working-directory: ./apps/frontend
+
+      - name: Upload TS Coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./apps/frontend/coverage/lcov.info
+          flags: frontend
+          fail_ci_if_error: true
