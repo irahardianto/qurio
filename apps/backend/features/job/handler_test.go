@@ -86,6 +86,28 @@ func TestHandler_Retry_NotFound(t *testing.T) {
 }
 
 func TestHandler_Retry(t *testing.T) {
-	// Skip Retry success test due to NSQ dependency simulation complexity 
-	// (channel/goroutine in Service) or add it if time permits.
+	mockRepo := new(MockRepo)
+	mockPub := new(MockPublisher)
+	svc := job.NewService(mockRepo, mockPub, slog.Default())
+	handler := job.NewHandler(svc)
+
+	jobID := "job-123"
+	j := &job.Job{
+		ID:      jobID,
+		Payload: []byte(`{"url": "http://example.com"}`),
+	}
+
+	mockRepo.On("Get", mock.Anything, jobID).Return(j, nil)
+	mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+	mockRepo.On("Delete", mock.Anything, jobID).Return(nil)
+
+	req := httptest.NewRequest("POST", "/jobs/"+jobID+"/retry", nil)
+	req.SetPathValue("id", jobID)
+	w := httptest.NewRecorder()
+
+	handler.Retry(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+	mockRepo.AssertExpectations(t)
+	mockPub.AssertExpectations(t)
 }

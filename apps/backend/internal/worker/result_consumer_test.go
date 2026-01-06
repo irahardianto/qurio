@@ -200,6 +200,32 @@ func TestResultConsumer_HandleMessage_DependencyError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestResultConsumer_HandleMessage_Timeout(t *testing.T) {
+	// Mock Embedder that sleeps longer than context timeout? 
+	// Or context.WithTimeout mock?
+	// We can't easily mock time inside the function without dependency injection of a clock or context factory.
+	// But we can verify that the context passed to Embedder HAS a deadline.
+	
+	embedder := &MockEmbedder{}
+	consumer := NewResultConsumer(embedder, &MockStore{}, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})
+	
+	payload := map[string]string{
+		"source_id": "src-1",
+		"content":   "test content",
+		"url":       "http://example.com",
+		"status":    "success",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+	
+	// Verify context has deadline
+	_, ok := embedder.LastCtx.Deadline()
+	assert.True(t, ok, "Context passed to embedder should have a deadline")
+}
+
 func contains(s, substr string) bool {
     for i := 0; i < len(s)-len(substr)+1; i++ {
         if s[i:i+len(substr)] == substr {

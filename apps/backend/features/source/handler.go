@@ -38,6 +38,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.URL == "" {
+		h.writeError(r.Context(), w, "VALIDATION_ERROR", "URL is required", http.StatusBadRequest)
+		return
+	}
+
 	src := &Source{
 		Type:       req.Type,
 		URL:        req.URL,
@@ -75,6 +80,16 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+
+	// Validate File Extension/MIME
+	ext := filepath.Ext(header.Filename)
+	validExts := map[string]bool{
+		".pdf": true, ".md": true, ".txt": true, ".json": true, ".csv": true,
+	}
+	if !validExts[ext] {
+		h.writeError(r.Context(), w, "BAD_REQUEST", "Unsupported file type", http.StatusBadRequest)
+		return
+	}
 
 	// Create uploads directory if not exists
 	uploadDir := "/var/lib/qurio/uploads"

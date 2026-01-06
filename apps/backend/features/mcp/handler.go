@@ -261,6 +261,16 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid search arguments")
 				return &resp
 			}
+			
+			if args.Query == "" {
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Query is required")
+				return &resp
+			}
+
+			if args.Alpha != nil && (*args.Alpha < 0.0 || *args.Alpha > 1.0) {
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Alpha must be between 0.0 and 1.0")
+				return &resp
+			}
 
 			if args.SourceID != nil && *args.SourceID != "" {
 				if args.Filters == nil {
@@ -479,6 +489,11 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 			if err := json.Unmarshal(params.Arguments, &args); err != nil {
 				slog.Warn("invalid read_page arguments", "error", err)
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
+				return &resp
+			}
+			
+			if args.URL == "" {
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "URL is required")
 				return &resp
 			}
 

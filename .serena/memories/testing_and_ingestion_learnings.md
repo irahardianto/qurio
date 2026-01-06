@@ -8,8 +8,13 @@
     - **Zombie Tasks**: `touch_loop` now uses `asyncio.wait_for(event.wait())` for immediate exit, preventing zombie processes on cancellation.
     - **Concurrency**: Global `WORKER_SEMAPHORE` (8) enforced in `main.py` for all task types.
     - **Error Handling**: `correlation_id` added to all NSQ failure payloads.
+    - **ResultConsumer Hardening**: Adopted "Poison Pill" testing strategy for handling malformed JSON messages without crashing. Explicit testing for embedding service timeouts and failures.
 
 ## Testing Strategy Updates
 - **Metadata**: Use `pytest.mark.parametrize` for table-driven testing of extraction logic.
 - **Concurrency**: explicit semaphore saturation tests required.
 - **Logging**: Must verify stdlib bridge to structlog.
+- **Backend Test Patterns**:
+    - **Dependency Injection**: Enforce interface-based mocks for `Database`, `VectorStore`, and `TaskPublisher` in `apps/backend/internal/app`.
+    - **MCP Handlers**: Use comprehensive table-driven tests covering all tools and negative paths (MethodNotFound, InvalidParams).
+    - **Adapters**: Simulate network errors (503, GraphQL errors) using `httptest` for Weaviate and dynamic key rotation checks for Gemini.

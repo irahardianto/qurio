@@ -1,8 +1,11 @@
 package source_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -167,6 +170,51 @@ func TestHandler_Create(t *testing.T) {
 		handler.Create(w, req)
 
 		assert.Equal(t, http.StatusConflict, w.Result().StatusCode)
+	})
+
+	t.Run("InvalidInput", func(t *testing.T) {
+		mockRepo := new(MockRepo)
+		mockPub := new(MockPublisher)
+		mockSettings := new(MockSettingsService)
+		svc := source.NewService(mockRepo, mockPub, nil, mockSettings)
+		handler := source.NewHandler(svc)
+
+		// Missing URL
+		reqBody := `{"type": "web", "url": ""}`
+		req := httptest.NewRequest("POST", "/sources", strings.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler.Create(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+	})
+}
+
+func TestHandler_Upload(t *testing.T) {
+	// Mock Service logic for Upload is complicated due to file I/O.
+	// We'll focus on testing the Handler validation logic here.
+	mockRepo := new(MockRepo)
+	svc := source.NewService(mockRepo, nil, nil, nil)
+	handler := source.NewHandler(svc)
+
+	t.Run("Invalid File Type", func(t *testing.T) {
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, _ := writer.CreateFormFile("file", "test.exe")
+		part.Write([]byte("binary"))
+		writer.Close()
+
+		req := httptest.NewRequest("POST", "/sources/upload", body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		w := httptest.NewRecorder()
+
+		handler.Upload(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+		
+		var resp map[string]interface{}
+		json.NewDecoder(w.Result().Body).Decode(&resp)
+		errObj := resp["error"].(map[string]interface{})
+		assert.Equal(t, "Unsupported file type", errObj["message"])
 	})
 }
 

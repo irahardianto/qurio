@@ -7,6 +7,19 @@
     - Added deep testing for `ResultConsumer` (handling invalid JSON, dependency errors).
     - Implemented table-driven tests for MCP `Handler` covering all tool invocations.
     - Added network error simulation tests for `Weaviate` adapter.
+    - `Gemini` dynamic embedder now supports key rotation on the fly via `SettingsService`, verified by tests.
+    - `Job` retry operation explicitly *deletes* the failed job record after re-publishing to queue, preventing duplicates (test verified).
 - **Error Handling:**
     - Updated `source` and `job` handlers to explicitly check for `sql.ErrNoRows` and return `404 Not Found` (HTTP 404) with `NOT_FOUND` error code in JSON envelope.
     - `source.Repository.SoftDelete` now checks `RowsAffected` to correctly report if a record was not found (returns `sql.ErrNoRows`).
+
+## Ingestion Worker (Python)
+- **Concurrency & Reliability:**
+    - Implemented global `WORKER_SEMAPHORE` (default: 8) in `main.py` to enforce strict concurrency limits across all task types (Web & File), independent of NSQ `max_in_flight`.
+    - **Zombie Prevention:** `process_message` uses `asyncio.Event` (`stop_touch`) with `wait_for` timeout in the heartbeat loop. This ensures the touch loop terminates immediately upon task completion or cancellation, preventing "zombie" processes during connection drops.
+- **Metadata Extraction:**
+    - Refactored extraction logic (for Docling and Crawl4AI) into **Pure Functions** (`extract_metadata_from_doc`, `extract_web_metadata`).
+    - Logic handles edge cases defensively (e.g., callable attributes in Pydantic models, missing fields).
+- **Process Isolation:**
+    - Uses `pebble.ProcessPool` for CPU-intensive document conversion (Docling/OCR) to isolate blocking C++ calls and enforce hard timeouts (`TIMEOUT_SECONDS = 1800`).
+    - Deferred imports in `init_worker` prevent side-effect leakage between parent/child processes.

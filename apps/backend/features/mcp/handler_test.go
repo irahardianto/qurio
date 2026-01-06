@@ -390,6 +390,68 @@ func TestHandler_ProcessRequest_Table(t *testing.T) {
 				return strings.Contains(res.Content[0].Text, "page content")
 			},
 		},
+		{
+			name: "Search Invalid Params (Empty Query)",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_search", "arguments": {}}`), // Missing query
+				ID: 8,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
+			wantRes: func(r *JSONRPCResponse) bool {
+				// Should return ErrInvalidParams
+				if r.Error == nil {
+					return false
+				}
+				errMap := r.Error.(map[string]interface{})
+				return errMap["code"].(int) == ErrInvalidParams
+			},
+		},
+		{
+			name: "Search Invalid Params (Alpha Out of Range)",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_search", "arguments": {"query": "test", "alpha": 1.5}}`),
+				ID: 81,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
+			wantRes: func(r *JSONRPCResponse) bool {
+				if r.Error == nil { return false }
+				errMap := r.Error.(map[string]interface{})
+				return errMap["code"].(int) == ErrInvalidParams
+			},
+		},
+		{
+			name: "Read Page Invalid Params (Empty URL)",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_read_page", "arguments": {"url": ""}}`),
+				ID: 9,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
+			wantRes: func(r *JSONRPCResponse) bool {
+				if r.Error == nil {
+					return false
+				}
+				errMap := r.Error.(map[string]interface{})
+				return errMap["code"].(int) == ErrInvalidParams
+			},
+		},
+		{
+			name: "Read Page No Content",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_read_page", "arguments": {"url": "http://empty.com"}}`),
+				ID: 10,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {
+				mr.On("GetChunksByURL", mock.Anything, "http://empty.com").Return([]retrieval.SearchResult{}, nil)
+			},
+			wantRes: func(r *JSONRPCResponse) bool {
+				res := r.Result.(ToolResult)
+				return strings.Contains(res.Content[0].Text, "No content found")
+			},
+		},
 	}
 
 	for _, tt := range tests {
