@@ -9,6 +9,7 @@
     - Added network error simulation tests for `Weaviate` adapter.
     - `Gemini` dynamic embedder now supports key rotation on the fly via `SettingsService`, verified by tests.
     - `Job` retry operation explicitly *deletes* the failed job record after re-publishing to queue, preventing duplicates (test verified).
+    - **Integration Testing:** Plan established to introduce `apps/backend/internal/testutils/integration_suite.go` using `testcontainers-go`. This will provision ephemeral Postgres, Weaviate, and NSQ containers for running true integration tests (not mocks) for `SourceRepo`, `WeaviateStore`, and `Worker` flows.
 - **Error Handling:**
     - Updated `source` and `job` handlers to explicitly check for `sql.ErrNoRows` and return `404 Not Found` (HTTP 404) with `NOT_FOUND` error code in JSON envelope.
     - `source.Repository.SoftDelete` now checks `RowsAffected` to correctly report if a record was not found (returns `sql.ErrNoRows`).
@@ -21,5 +22,5 @@
     - Refactored extraction logic (for Docling and Crawl4AI) into **Pure Functions** (`extract_metadata_from_doc`, `extract_web_metadata`).
     - Logic handles edge cases defensively (e.g., callable attributes in Pydantic models, missing fields).
 - **Process Isolation:**
-    - Uses `pebble.ProcessPool` for CPU-intensive document conversion (Docling/OCR) to isolate blocking C++ calls and enforce hard timeouts (`TIMEOUT_SECONDS = 1800`).
+    - Uses `pebble.ProcessPool` for CPU-intensive document conversion (Docling and OCR) to isolate blocking C++ calls and enforce hard timeouts (`TIMEOUT_SECONDS = 1800`).
     - Deferred imports in `init_worker` prevent side-effect leakage between parent/child processes.

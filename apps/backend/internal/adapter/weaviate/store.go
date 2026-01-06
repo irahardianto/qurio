@@ -153,7 +153,11 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 	}
 	
 	if len(res.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %v", res.Errors)
+		msg := ""
+		for _, e := range res.Errors {
+			msg += fmt.Sprintf("%s; ", e.Message)
+		}
+		return nil, fmt.Errorf("graphql error: %s", msg)
 	}
 
 	var results []retrieval.SearchResult
@@ -255,7 +259,11 @@ func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk,
 		return nil, err
 	}
 	if len(res.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %v", res.Errors)
+		msg := ""
+		for _, e := range res.Errors {
+			msg += fmt.Sprintf("%s; ", e.Message)
+		}
+		return nil, fmt.Errorf("graphql error: %s", msg)
 	}
 
 	var chunks []worker.Chunk
@@ -328,7 +336,11 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 		return nil, err
 	}
 	if len(res.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %v", res.Errors)
+		msg := ""
+		for _, e := range res.Errors {
+			msg += fmt.Sprintf("%s; ", e.Message)
+		}
+		return nil, fmt.Errorf("graphql error: %s", msg)
 	}
 
 	var results []retrieval.SearchResult

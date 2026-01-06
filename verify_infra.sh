@@ -4,6 +4,14 @@
 
 echo "Verifying Infrastructure..."
 
+# Check Docker Daemon (Required for Integration Tests)
+if docker info > /dev/null 2>&1; then
+    echo "✅ Docker Daemon reachable"
+else
+    echo "❌ Docker Daemon NOT reachable (Required for Integration Tests)"
+    exit 1
+fi
+
 # Check Backend (API)
 if curl -s -f http://localhost:8081/health > /dev/null; then
     echo "✅ Backend reachable"
