@@ -2,9 +2,6 @@
 
 ## Codebase Health & Coverage (Jan 2026)
 
-### Status
-The codebase is in a robust state with **>95% coverage** across all core systems following the Jan 6th, 2026 sprint.
-
 ### Test Coverage Stats
 - **Backend (Go):** **100% Pass Rate**
     - **Core Logic:** High coverage in `internal/text`, `internal/settings`, `internal/vector`.
