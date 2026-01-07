@@ -79,6 +79,11 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		return nil // Don't retry invalid messages
 	}
 
+	if payload.SourceID == "" || payload.URL == "" {
+		slog.Error("missing required fields, dropping", "source_id", payload.SourceID, "url", payload.URL)
+		return nil
+	}
+
 	correlationID := payload.CorrelationID
 	if correlationID == "" {
 		correlationID = uuid.New().String()

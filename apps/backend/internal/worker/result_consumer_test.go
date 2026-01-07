@@ -190,6 +190,30 @@ func TestResultConsumer_HandleMessage_InvalidJSON(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestResultConsumer_HandleMessage_PoisonPill(t *testing.T) {
+	embedder := &MockEmbedder{}
+	store := &MockStore{}
+	consumer := NewResultConsumer(embedder, store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})
+	
+	tests := []struct {
+		name    string
+		payload []byte
+	}{
+		{"Malformed JSON", []byte(`{"source_id": "1", "content": ...`)}, // Truncated
+		{"Missing SourceID", []byte(`{"url": "http://example.com"}`)},
+		{"Missing URL", []byte(`{"source_id": "123"}`)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &nsq.Message{Body: tt.payload}
+			// Should return nil (ACK) even on error to prevent infinite redelivery of poison
+			err := consumer.HandleMessage(msg)
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestResultConsumer_HandleMessage_DependencyError(t *testing.T) {
 	embedder := &MockEmbedder{ErrorToReturn: fmt.Errorf("api error")}
 	consumer := NewResultConsumer(embedder, &MockStore{}, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})

@@ -3,13 +3,11 @@
 ## Ingestion Worker
 - **Architecture**: Hybrid async/sync model. Web crawling is async (crawl4ai), file processing is sync (docling) offloaded to `pebble.ProcessPool`.
 - **Testing**: Heavy reliance on mocking (pebble, crawl4ai).
-- **Recent Improvements (2026-01-06)**:
-    - **Metadata Extraction**: Logic extracted to pure functions (`extract_metadata_from_doc`). Handled edge cases (callables, NoneTypes) defensively.
-    - **Zombie Tasks**: `touch_loop` now uses `asyncio.wait_for(event.wait())` for immediate exit, preventing zombie processes on cancellation.
-    - **Concurrency**: Global `WORKER_SEMAPHORE` (8) enforced in `main.py` for all task types.
-    - **Error Handling**: `correlation_id` added to all NSQ failure payloads.
-    - **ResultConsumer Hardening**: Adopted "Poison Pill" testing strategy for handling malformed JSON and Empty Body messages without crashing. Explicit testing for embedding service timeouts and failures.
-    - **Retrieval Service**: Consolidated search logic testing into a comprehensive Table-Driven Test suite covering success, reranking, filters, and dependency failures (Embedder/Store/Reranker/Settings).
+- **Recent Improvements (2026-01-07)**:
+    - **Middleware Trace Chain**: Validated `CorrelationID` middleware integrity with table-driven tests (generation vs preservation).
+    - **Worker Poison Pill**: Enhanced `ResultConsumer` to explicitly drop messages missing `SourceID` or `URL` (Poison Pill pattern), preventing infinite retry loops or zombie processing.
+    - **Retrieval Service**: Consolidated search logic testing into a comprehensive Table-Driven Test suite covering success, reranking, filters, and dependency failures.
+    - **Integration Stability**: Unskipped `TestIngestIntegration` in `worker/integration_test.go`, verifying the full ingestion pipeline (NSQ -> Worker -> DB/Weaviate) with Testcontainers.
 
 ## Testing Strategy Updates
 - **Metadata**: Use `pytest.mark.parametrize` for table-driven testing of extraction logic.

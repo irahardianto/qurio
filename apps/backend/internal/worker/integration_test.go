@@ -75,9 +75,6 @@ func (a *PageManagerAdapter) CountPendingPages(ctx context.Context, sourceID str
 }
 
 func TestIngestIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
 	s := testutils.NewIntegrationSuite(t)
 	s.Setup()
 	defer s.Teardown()
