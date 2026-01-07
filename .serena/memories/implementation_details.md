@@ -1,26 +1,14 @@
-- **App Architecture:** Refactored `apps/backend/internal/app` to use Dependency Injection with interfaces (`Database`, `VectorStore`, `TaskPublisher`).
-- **Bootstrap Logic:** Decoupled `main.go` by moving infrastructure initialization (DB, Migrations, Weaviate, NSQ Producer) to `apps/backend/internal/app/bootstrap.go`. This improves testability and separates concerns.
-- **Testability:**
-    - Created `mocks_test.go` in `app` package.
-    - Updated `app.New` to accept interfaces, allowing unit testing with mocks (using `sqlmock` for DB).
-    - `main.go` now acts as the Composition Root, initializing concrete adapters (`wstore.NewStore`, `nsq.NewProducer`) and passing them to `app.New`.
-    - Added deep testing for `ResultConsumer` (handling invalid JSON, dependency errors).
-    - Implemented table-driven tests for MCP `Handler` covering all tool invocations.
-    - Added network error simulation tests for `Weaviate` adapter.
-    - `Gemini` dynamic embedder now supports key rotation on the fly via `SettingsService`, verified by tests.
-    - `Job` retry operation explicitly *deletes* the failed job record after re-publishing to queue, preventing duplicates (test verified).
-    - **Integration Testing:** Plan established to introduce `apps/backend/internal/testutils/integration_suite.go` using `testcontainers-go`. This will provision ephemeral Postgres, Weaviate, and NSQ containers for running true integration tests (not mocks) for `SourceRepo`, `WeaviateStore`, and `Worker` flows.
-- **Error Handling:**
-    - Updated `source` and `job` handlers to explicitly check for `sql.ErrNoRows` and return `404 Not Found` (HTTP 404) with `NOT_FOUND` error code in JSON envelope.
-    - `source.Repository.SoftDelete` now checks `RowsAffected` to correctly report if a record was not found (returns `sql.ErrNoRows`).
-
-## Ingestion Worker (Python)
-- **Concurrency & Reliability:**
-    - Implemented global `WORKER_SEMAPHORE` (default: 8) in `main.py` to enforce strict concurrency limits across all task types (Web & File), independent of NSQ `max_in_flight`.
-    - **Zombie Prevention:** `process_message` uses `asyncio.Event` (`stop_touch`) with `wait_for` timeout in the heartbeat loop. This ensures the touch loop terminates immediately upon task completion or cancellation, preventing "zombie" processes during connection drops.
-- **Metadata Extraction:**
-    - Refactored extraction logic (for Docling and Crawl4AI) into **Pure Functions** (`extract_metadata_from_doc`, `extract_web_metadata`).
-    - Logic handles edge cases defensively (e.g., callable attributes in Pydantic models, missing fields).
-- **Process Isolation:**
-    - Uses `pebble.ProcessPool` for CPU-intensive document conversion (Docling and OCR) to isolate blocking C++ calls and enforce hard timeouts (`TIMEOUT_SECONDS = 1800`).
-    - Deferred imports in `init_worker` prevent side-effect leakage between parent/child processes.
+### 2026-01-07: Backend Test Coverage Improvements
+- **Bootstrap Refactoring:**
+    - Extracted retry logic for Weaviate schema initialization into `EnsureSchemaWithRetry` (pure function with retry loop).
+    - Updated `Bootstrap` to use `EnsureSchemaWithRetry`.
+    - Added unit tests for retry logic using `MockVectorStore`.
+- **Integration Testing:**
+    - Implemented `apps/backend/internal/app/bootstrap_integration_test.go` using `Testcontainers`.
+    - Updated `IntegrationSuite` to expose container configuration via `GetAppConfig`.
+    - Added support for running migrations in `IntegrationSuite` or deferring to `Bootstrap` (via `SkipMigrations` flag).
+    - Added `MigrationPath` to `config.Config` to allow tests to override migration location.
+- **Application Structure:**
+    - Refactored `apps/backend/main.go` to extract `run(ctx, cfg, logger)` function.
+    - Added `apps/backend/smoke_test.go` (package `main`) to verify full application startup and wiring by running `run` against Testcontainers.
+    - Enhanced `app.New` unit tests to verify route registration for key endpoints.

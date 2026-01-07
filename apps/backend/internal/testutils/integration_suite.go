@@ -19,6 +19,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
+
+	"qurio/apps/backend/internal/config"
 )
 
 type IntegrationSuite struct {
@@ -31,6 +33,8 @@ type IntegrationSuite struct {
 	pgContainer       *postgres.PostgresContainer
 	weaviateContainer testcontainers.Container
 	nsqContainer      testcontainers.Container
+
+	SkipMigrations bool
 }
 
 func NewIntegrationSuite(t *testing.T) *IntegrationSuite {
@@ -65,9 +69,11 @@ func (s *IntegrationSuite) Setup() {
 	basepath := filepath.Dir(b)
 	migrationPath := fmt.Sprintf("file://%s/../../migrations", basepath)
 
-	m, err := migrate.New(migrationPath, connStr)
-	require.NoError(s.T, err)
-	require.NoError(s.T, m.Up())
+	if !s.SkipMigrations {
+		m, err := migrate.New(migrationPath, connStr)
+		require.NoError(s.T, err)
+		require.NoError(s.T, m.Up())
+	}
 
 	// 2. Weaviate
 	req := testcontainers.ContainerRequest{
@@ -133,5 +139,32 @@ func (s *IntegrationSuite) Teardown() {
 	}
 	if s.nsqContainer != nil {
 		s.nsqContainer.Terminate(ctx)
+	}
+}
+
+func (s *IntegrationSuite) GetAppConfig() *config.Config {
+	ctx := context.Background()
+
+	// Postgres
+	host, _ := s.pgContainer.Host(ctx)
+	port, _ := s.pgContainer.MappedPort(ctx, "5432")
+
+	// Weaviate
+	wHost, _ := s.weaviateContainer.Host(ctx)
+	wPort, _ := s.weaviateContainer.MappedPort(ctx, "8080")
+
+	// NSQ
+	nHost, _ := s.nsqContainer.Host(ctx)
+	nPort, _ := s.nsqContainer.MappedPort(ctx, "4150")
+
+	return &config.Config{
+		DBHost:         host,
+		DBPort:         port.Int(),
+		DBUser:         "test",
+		DBPass:         "test",
+		DBName:         "qurio_test",
+		WeaviateHost:   fmt.Sprintf("%s:%s", wHost, wPort.Port()),
+		WeaviateScheme: "http",
+		NSQDHost:       fmt.Sprintf("%s:%s", nHost, nPort.Port()),
 	}
 }

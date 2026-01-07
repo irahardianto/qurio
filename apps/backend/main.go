@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -17,8 +18,8 @@ import (
 
 func main() {
 	// Initialize structured logger
-	logger := slog.New(logger.NewContextHandler(slog.NewJSONHandler(os.Stdout, nil)))
-	slog.SetDefault(logger)
+	l := slog.New(logger.NewContextHandler(slog.NewJSONHandler(os.Stdout, nil)))
+	slog.SetDefault(l)
 
 	// 1. Load Config
 	cfg, err := config.Load()
@@ -27,19 +28,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 2. Bootstrap Infrastructure (DB, Weaviate, NSQ Producer, Migrations)
-	deps, err := app.Bootstrap(context.Background(), cfg)
-	if err != nil {
-		slog.Error("bootstrap failed", "error", err)
+	// Main context
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if err := run(ctx, cfg, l); err != nil {
+		slog.Error("application error", "error", err)
 		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+	// 2. Bootstrap Infrastructure (DB, Weaviate, NSQ Producer, Migrations)
+	deps, err := app.Bootstrap(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 	defer deps.DB.Close()
 
 	// 3. Initialize App
 	application, err := app.New(cfg, deps.DB, deps.VectorStore, deps.NSQProducer, logger)
 	if err != nil {
-		slog.Error("failed to initialize app", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize app: %w", err)
 	}
 
 	// 4. Worker (Result Consumer) Setup
@@ -52,7 +62,7 @@ func main() {
 		consumer.AddConcurrentHandlers(nsq.HandlerFunc(func(m *nsq.Message) error {
 			return application.ResultConsumer.HandleMessage(m)
 		}), cfg.IngestionConcurrency)
-		
+
 		// Connect to Lookupd
 		if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
 			slog.Error("failed to connect to NSQLookupd", "error", err)
@@ -67,6 +77,8 @@ func main() {
 		defer ticker.Stop()
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-ticker.C:
 				if err := application.SourceService.ResetStuckPages(context.Background()); err != nil {
 					slog.Error("failed to reset stuck pages", "error", err)
@@ -76,11 +88,8 @@ func main() {
 	}()
 
 	// 5. Start Server
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
 	if err := application.Run(ctx); err != nil {
-		slog.Error("server failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("server failed: %w", err)
 	}
+	return nil
 }

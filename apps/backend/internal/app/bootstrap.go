@@ -57,7 +57,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	// However, usually path needs to be absolute or relative to where binary is run.
 	// main.go was likely running from apps/backend.
 	// We will stick to "file://migrations" as per plan and assume correct cwd.
-	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
+	m, err := migrate.NewWithDatabaseInstance(cfg.MigrationPath, "postgres", driver)
 	if err != nil {
 		return nil, fmt.Errorf("migration instance error: %w", err)
 	}
@@ -74,13 +74,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	vecStore := wstore.NewStore(wClient)
 	
 	// Ensure Schema Retry
-	for i := 0; i < 10; i++ {
-		if err := vecStore.EnsureSchema(ctx); err == nil {
-			break
-		}
-		time.Sleep(2 * time.Second)
-	}
-	if err := vecStore.EnsureSchema(ctx); err != nil {
+	if err := EnsureSchemaWithRetry(ctx, vecStore, 10, 2*time.Second); err != nil {
 		return nil, fmt.Errorf("weaviate schema error: %w", err)
 	}
 
@@ -116,4 +110,18 @@ func createTopics(nsqdHost string) {
 		http.Post(nsqHttpURL, "application/json", nil)
 		http.Post(nsqResultURL, "application/json", nil)
 	}()
+}
+
+// EnsureSchemaWithRetry delegates schema check to a helper with retry logic.
+func EnsureSchemaWithRetry(ctx context.Context, store VectorStore, attempts int, delay time.Duration) error {
+	var err error
+	for i := 0; i < attempts; i++ {
+		if err = store.EnsureSchema(ctx); err == nil {
+			return nil
+		}
+		if i < attempts-1 {
+			time.Sleep(delay)
+		}
+	}
+	return err
 }

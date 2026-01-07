@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -25,14 +27,40 @@ func TestNew_Success(t *testing.T) {
 	cfg := &config.Config{}
 
 	// Act
-	app, err := New(cfg, db, mockVec, mockPub, logger)
+	application, err := New(cfg, db, mockVec, mockPub, logger)
 
 	// Assert
 	assert.NoError(t, err)
-	assert.NotNil(t, app)
-	assert.NotNil(t, app.Handler)
-	assert.NotNil(t, app.SourceService)
-	assert.NotNil(t, app.ResultConsumer)
+	assert.NotNil(t, application)
+	assert.NotNil(t, application.Handler)
+	assert.NotNil(t, application.SourceService)
+	assert.NotNil(t, application.ResultConsumer)
+
+	// Verify Routes
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{"GET", "/sources"},
+		{"POST", "/sources"},
+		{"GET", "/settings"},
+		// {"GET", "/stats"}, // Requires DB mocks, skipping for simple connectivity check
+		// {"GET", "/mcp/sse"}, // Blocking SSE, skipping
+	}
+
+	ts := httptest.NewServer(application.Handler)
+	defer ts.Close()
+
+	for _, rt := range routes {
+		req, _ := http.NewRequest(rt.method, ts.URL+rt.path, nil)
+		resp, err := http.DefaultClient.Do(req)
+		assert.NoError(t, err)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		// Should NOT be 404. Might be 401, 500, 200 depending on mock, but 404 means route not found.
+		assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "Route %s %s not found", rt.method, rt.path)
+	}
 }
 
 type FakeDB struct{}
