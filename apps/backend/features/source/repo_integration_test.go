@@ -40,17 +40,6 @@ func TestSourceRepo_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists)
 
-	// Try to insert another with same hash (if ExistsByHash is not used, uniqueness might rely on application logic,
-	// but let's check if there's a DB constraint. The plan says "Deduplication constraint on content_hash is verified".
-	// Looking at repo.go, Save inserts blindly. If there is a UNIQUE index, it will fail.
-	// We should check if migration defines UNIQUE(content_hash).
-	// But repo.go ExistsByHash query includes `deleted_at IS NULL`.
-	// The Service layer handles deduplication using ExistsByHash.
-	// The Repo integration test should verify the Repo methods work as expected.
-	// If the DB has a unique constraint, we can test it. If not, we skip that strict check here.
-	// Let's rely on Repo behavior: duplicate hash insertion *might* succeed if no DB constraint exists.
-	// But let's verify basic CRUD first.)
-
 	// 2. Get and List
 	retrieved, err := repo.Get(ctx, src.ID)
 	require.NoError(t, err)
@@ -91,14 +80,9 @@ func TestSourceRepo_Integration(t *testing.T) {
 	// CountPendingPages
 	count, err := repo.CountPendingPages(ctx, src.ID)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count) // pending + processing
+	assert.Equal(t, 2, count)
 
 	// ResetStuckPages
-	// processing page updated_at is NOW() by default DB trigger or if we inserted it?
-	// The repo.BulkCreatePages does INSERT ... VALUES ...
-	// It relies on DB default for created_at/updated_at.
-	// We need to manually age the page to test ResetStuckPages.
-	// Since we can't easily modify time in Postgres via this repo, we can test that it *doesn't* reset fresh pages.
 	resetCount, err := repo.ResetStuckPages(ctx, 1*time.Hour)
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), resetCount)
@@ -115,4 +99,50 @@ func TestSourceRepo_Integration(t *testing.T) {
 			assert.Equal(t, "completed", p.Status)
 		}
 	}
+}
+
+func TestRepo_UniqueIndex_SoftDelete(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	repo := source.NewPostgresRepo(s.DB)
+	ctx := context.Background()
+
+	// 1. Create Source A
+	srcA := &source.Source{
+		Type:        "web",
+		URL:         "http://example.com/unique",
+		ContentHash: "hash-unique",
+		Name:        "Source Unique",
+	}
+	err := repo.Save(ctx, srcA)
+	require.NoError(t, err)
+
+	// 2. Soft Delete A
+	err = repo.SoftDelete(ctx, srcA.ID)
+	require.NoError(t, err)
+
+	// 3. Create Source B (Same Hash) -> Should Succeed
+	srcB := &source.Source{
+		Type:        "web",
+		URL:         "http://example.com/unique-2",
+		ContentHash: "hash-unique",
+		Name:        "Source Unique 2",
+	}
+	err = repo.Save(ctx, srcB)
+	require.NoError(t, err)
+
+	// 4. Create Source C (Same Hash) -> Should Fail (Active B exists)
+	srcC := &source.Source{
+		Type:        "web",
+		URL:         "http://example.com/unique-3",
+		ContentHash: "hash-unique",
+		Name:        "Source Unique 3",
+	}
+	err = repo.Save(ctx, srcC)
+	assert.Error(t, err)
 }

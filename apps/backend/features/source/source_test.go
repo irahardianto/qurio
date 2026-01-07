@@ -13,9 +13,6 @@ import (
 
 // Reusing MockRepo from handler_test.go is tricky because they are in the same package (source)
 // but handler_test.go defines MockRepo and it seems to lack methods.
-// The build error said: "MockRepo redeclared in this block" AND "missing method Count"
-// So I should extend the existing MockRepo in handler_test.go or just fix it there.
-// But I can't easily edit handler_test.go to add methods without potential side effects (though adding methods is usually safe).
 // To avoid conflict, I'll rename my mocks here.
 
 type TestPublisher struct {
@@ -86,5 +83,24 @@ func TestService_ResetStuckPages(t *testing.T) {
 
 	if err := svc.ResetStuckPages(context.Background()); err != nil {
 		t.Errorf("ResetStuckPages failed: %v", err)
+	}
+}
+
+func TestService_Create_InvalidRegex(t *testing.T) {
+	repo := &TestRepo{}
+	svc := NewService(repo, nil, nil, nil)
+	
+	src := &Source{
+		URL:        "http://example.com",
+		Type:       "web",
+		Exclusions: []string{"["}, // Invalid Regex
+	}
+	
+	err := svc.Create(context.Background(), src)
+	if err == nil {
+		t.Fatal("Expected error for invalid regex, got nil")
+	}
+	if err.Error() != "invalid exclusion regex: [" {
+		t.Errorf("Expected 'invalid exclusion regex: [', got '%v'", err)
 	}
 }

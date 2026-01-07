@@ -92,7 +92,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create uploads directory if not exists
-	uploadDir := "/var/lib/qurio/uploads"
+	uploadDir := os.Getenv("QURIO_UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = "/var/lib/qurio/uploads"
+	}
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to create upload directory", http.StatusInternalServerError)
 		return

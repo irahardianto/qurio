@@ -12,3 +12,7 @@
     - Refactored `apps/backend/main.go` to extract `run(ctx, cfg, logger)` function.
     - Added `apps/backend/smoke_test.go` (package `main`) to verify full application startup and wiring by running `run` against Testcontainers.
     - Enhanced `app.New` unit tests to verify route registration for key endpoints.
+- **Feature Hardening:**
+    - **Source:** Implemented `Exclusions` regex validation in `Service.Create`. Added `POST /sources/upload` integration test verifying file persistence to `QURIO_UPLOAD_DIR`.
+    - **Job:** Verified `Retry` timeout logic (5s limit on NSQ publish). Validated `failed_jobs` cascade delete via integration tests.
+    - **MCP:** Hardened JSON-RPC handler with table-driven tests for edge cases (empty params, invalid values). Validated SSE session establishment and Correlation ID propagation in integration tests.

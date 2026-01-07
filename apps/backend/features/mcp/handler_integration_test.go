@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,6 +15,7 @@ import (
 	"qurio/apps/backend/features/mcp"
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/adapter/weaviate"
+	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/testutils"
@@ -87,8 +89,6 @@ func TestMCPHandler_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	// 3. Test qurio_search via JSON-RPC
-	// "tools/call" -> "qurio_search"
-	
 	searchArgs := mcp.SearchArgs{
 		Query: "fox",
 	}
@@ -111,25 +111,6 @@ func TestMCPHandler_Integration(t *testing.T) {
 	req := httptest.NewRequest("POST", "/mcp/messages?sessionId=test-session", strings.NewReader(string(bodyBytes)))
 	rr := httptest.NewRecorder()
 
-	// Need to register session first?
-	// Handler.HandleMessage checks session ID.
-	// But HandleSSE registers session.
-	// We can manually register a session in the test or simulate the flow.
-	// The `Handler` struct has unexported `sessions`.
-	// Use ServeHTTP for standard JSON-RPC if endpoint supports it?
-	// `HandleMessage` is for SSE flow.
-	// `ServeHTTP` (the ServeMux usually routes to it) handles pure JSON-RPC?
-	// `handler.go` has `ServeHTTP` which handles `mcp request received` and `processRequest`.
-	// Does it require session? `ServeHTTP` implementation in `handler.go`:
-	/*
-	func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-		// ...
-		resp := h.processRequest(r.Context(), req)
-		// ...
-	}
-	*/
-	// It does NOT check session. So we can test via ServeHTTP for direct JSON-RPC testing.
-	
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -139,15 +120,6 @@ func TestMCPHandler_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, resp.Error)
 	
-	// Check Result
-	// Result should be ToolResult -> Content -> Text
-	// Use map for easier access or cast to expected struct if exported
-	// resp.Result is interface{}.
-	// ToolResult struct is in `handler.go`.
-	// We can't cast to unexported types if they were unexported, but `ToolResult` is exported.
-	
-	// Unmarshal result to ToolResult?
-	// JSON unmarshal to interface{} map is usually map[string]interface{}
 	resultMap, ok := resp.Result.(map[string]interface{})
 	require.True(t, ok)
 	
@@ -194,4 +166,82 @@ func TestMCPHandler_Integration(t *testing.T) {
 	textRead := contentListRead[0].(map[string]interface{})["text"].(string)
 	
 	assert.Contains(t, textRead, "The quick brown fox")
+}
+
+func TestHandler_SSE_Correlation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	// Dependencies
+	vectorStore := weaviate.NewStore(s.Weaviate)
+	embedder := new(MockEmbedder)
+	settingsRepo := settings.NewPostgresRepo(s.DB)
+	settingsSvc := settings.NewService(settingsRepo)
+	retrievalSvc := retrieval.NewService(embedder, vectorStore, nil, settingsSvc, nil)
+	sourceRepo := source.NewPostgresRepo(s.DB)
+	handler := mcp.NewHandler(retrievalSvc, sourceRepo)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 1. Establish SSE Connection
+	reqSSE := httptest.NewRequest("GET", "/mcp/sse", nil).WithContext(ctx)
+	wSSE := httptest.NewRecorder()
+
+	done := make(chan bool)
+	go func() {
+		handler.HandleSSE(wSSE, reqSSE)
+		done <- true
+	}()
+
+	// 2. Read Session ID
+	var sessionID string
+	timeout := time.After(2 * time.Second)
+	found := false
+	for !found {
+		select {
+		case <-timeout:
+			t.Fatal("Timeout waiting for SSE session ID")
+		default:
+			body := wSSE.Body.String()
+			if strings.Contains(body, "event: id") {
+				parts := strings.Split(body, "event: id\ndata: ")
+				if len(parts) > 1 {
+					rest := parts[1]
+					idPart := strings.Split(rest, "\n")[0]
+					sessionID = strings.TrimSpace(idPart)
+					if sessionID != "" {
+						found = true
+					}
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	
+	assert.NotEmpty(t, sessionID)
+
+	// 3. Send Message with Correlation ID (Verify synchronous error response includes it)
+	correlationID := "test-correlation-id-123"
+	
+	reqErr := httptest.NewRequest("POST", "/mcp/messages?sessionId="+sessionID, strings.NewReader("invalid-json"))
+	// Inject correlation ID simulating middleware
+	reqErr = reqErr.WithContext(middleware.WithCorrelationID(context.Background(), correlationID))
+	wErr := httptest.NewRecorder()
+	
+	handler.HandleMessage(wErr, reqErr)
+	
+	assert.Equal(t, http.StatusBadRequest, wErr.Code)
+	var errResp map[string]interface{}
+	err := json.Unmarshal(wErr.Body.Bytes(), &errResp)
+	require.NoError(t, err)
+	
+	assert.Equal(t, correlationID, errResp["correlationId"])
+	
+	cancel() // Stop SSE
+	<-done
 }

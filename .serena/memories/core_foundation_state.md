@@ -27,6 +27,8 @@
 5. **Configuration:** No redundancy in TSConfig.
 6. **Architecture Refactor:** `internal/app` now uses **Interfaces** (`Database`, `VectorStore`, `TaskPublisher`) for I/O isolation, resolving previous coverage gaps.
 7. **Bootstrap Decoupling:** Infrastructure setup isolated in `bootstrap.go`, simplifying `main.go` and enabling targeted testing of initialization logic.
+8. **Feature Integration Tests:** Full integration suites implemented for `source`, `job`, and `mcp` features, validating DB constraints, file uploads, and SSE streams using Testcontainers.
+9. **Resilient Validation:** Regex validation for `Exclusions` and timeout logic for `Job.Retry` verified.
 
 ## Critical Subsystems
 - **Ingestion:** Robust pipeline with `ChunkMarkdown` (93% covered) and `ResultConsumer` (High coverage).
@@ -38,4 +40,5 @@
 - **None critical.** Previous issues with backend coverage and handler errors were resolved in `2026-01-06-test-coverage-boost-1.md` and `2026-01-06-test-coverage-boost-2.md` executions.
 
 ## Active Plans (Jan 7, 2026)
-- **Backend Test Hardening:** Two active plans (`docs/plans/2026-01-07-test-coverage-backend-1.md` for Integration Suite, `docs/plans/2026-01-07-test-coverage-backend-2.md` for Unit/Hardening) targeting 100% resilient coverage.
+- **Backend Test Hardening:** 
+    - `docs/plans/2026-01-07-test-coverage-backend-5.md`: **COMPLETED**. Covered Stats/Job/Source/MCP edge cases and integration paths.

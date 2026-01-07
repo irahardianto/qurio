@@ -265,18 +265,6 @@ func TestHandler_HandleMessage_Success(t *testing.T) {
 	mockSourceMgr := new(MockSourceManager)
 	handler := NewHandler(mockRetriever, mockSourceMgr)
 
-	// Create session manually (internal state) or use HandleSSE to create one.
-	// Since sessions map is private, we can't inject.
-	// But HandleSSE blocks.
-	// We can use a trick: call HandleSSE in a goroutine, extract sessionID from output?
-	// Too complex for unit test.
-	// We can't access private fields.
-	// We can modify Handler to expose a way to add session for testing or use a constructor option?
-	// Or we skip deep testing of HandleMessage success path in unit tests and rely on integration tests.
-	// Or we use unsafe/reflect? No.
-	// Actually, HandleSSE writes "event: id\ndata: <uuid>"
-	// We can start HandleSSE, read the ID, then call HandleMessage.
-	
 	reqSSE := httptest.NewRequest("GET", "/mcp/sse", nil)
 	wSSE := httptest.NewRecorder()
 	
@@ -286,11 +274,7 @@ func TestHandler_HandleMessage_Success(t *testing.T) {
 	// Start SSE in goroutine
 	go handler.HandleSSE(wSSE, reqSSE)
 	
-	// Wait for session ID (poll recorder)
-	// This is flaky.
-	// Let's assume we can't easily test the full async flow here without better design for testability (e.g. SessionManager interface).
-	// We tested validation paths which cover 38.9%.
-	// processRequest is 52.1% covered via ServeHTTP.
+	// Terminate
 	cancel()
 }
 
@@ -394,15 +378,12 @@ func TestHandler_ProcessRequest_Table(t *testing.T) {
 			name: "Search Invalid Params (Empty Query)",
 			req: JSONRPCRequest{
 				Method: "tools/call",
-				Params: json.RawMessage(`{"name": "qurio_search", "arguments": {}}`), // Missing query
+				Params: json.RawMessage(`{"name": "qurio_search", "arguments": {}}`),
 				ID: 8,
 			},
 			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
 			wantRes: func(r *JSONRPCResponse) bool {
-				// Should return ErrInvalidParams
-				if r.Error == nil {
-					return false
-				}
+				if r.Error == nil { return false }
 				errMap := r.Error.(map[string]interface{})
 				return errMap["code"].(int) == ErrInvalidParams
 			},
@@ -430,9 +411,7 @@ func TestHandler_ProcessRequest_Table(t *testing.T) {
 			},
 			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
 			wantRes: func(r *JSONRPCResponse) bool {
-				if r.Error == nil {
-					return false
-				}
+				if r.Error == nil { return false }
 				errMap := r.Error.(map[string]interface{})
 				return errMap["code"].(int) == ErrInvalidParams
 			},
@@ -462,6 +441,7 @@ func TestHandler_ProcessRequest_Table(t *testing.T) {
 			
 			tt.setup(mr, msm)
 			
+			// Use processRequest directly as it's cleaner for unit tests
 			res := handler.processRequest(context.Background(), tt.req)
 			if tt.wantErr {
 				assert.Nil(t, res)

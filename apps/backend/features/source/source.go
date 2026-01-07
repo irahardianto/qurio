@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"qurio/apps/backend/internal/worker"
@@ -83,6 +84,13 @@ func NewService(repo Repository, pub EventPublisher, chunkStore ChunkStore, sett
 }
 
 func (s *Service) Create(ctx context.Context, src *Source) error {
+	// Validate Exclusions
+	for _, pattern := range src.Exclusions {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("invalid exclusion regex: %s", pattern)
+		}
+	}
+
 	// 0. Compute Hash
 	hash := sha256.Sum256([]byte(src.URL))
 	src.ContentHash = fmt.Sprintf("%x", hash)
