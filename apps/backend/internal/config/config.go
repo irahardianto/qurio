@@ -23,6 +23,7 @@ type Config struct {
 	NSQDHost   string `envconfig:"NSQD_HOST" default:"nsqd:4150"`
 	IngestionConcurrency int `envconfig:"INGESTION_CONCURRENCY" default:"50"`
 	MigrationPath string `envconfig:"MIGRATION_PATH" default:"file://migrations"`
+	GeminiAPIKey string `envconfig:"GEMINI_API_KEY"`
 }
 
 func Load() (*Config, error) {

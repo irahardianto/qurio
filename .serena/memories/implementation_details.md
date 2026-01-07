@@ -17,10 +17,16 @@
     - **Job:** Verified `Retry` timeout logic (5s limit on NSQ publish). Validated `failed_jobs` cascade delete via integration tests.
     - **MCP:** Hardened JSON-RPC handler with table-driven tests for edge cases (empty params, invalid values). Validated SSE session establishment and Correlation ID propagation in integration tests.
 
-### 2026-01-07: Ingestion Worker Optimization
-- **Dead Code Removal:**
-    - Removed unused imports (`json`, `httpx`, `signal`, `ProcessPoolExecutor`) in `handlers/web.py` and `handlers/file.py`.
-    - Removed unused `result_content` variable in `main.py`.
-    - Removed unused `exclusions` parameter in `handle_web_task` (web handler).
-- **Concurrency Optimization:**
-    - Removed redundant `CONCURRENCY_LIMIT` semaphore (size 8) in `handle_file_task`. The global `WORKER_SEMAPHORE` (size 8) in `main.py` already throttles concurrency at the entry point.
+$1
+
+$1
+- **Ingestion Worker Fix:**
+  - Diagnosed `Permission denied` error in `RapidOCR` model download.
+  - Updated `apps/ingestion-worker/Dockerfile` to run model download as `root` (before switching user) to ensure write access to `site-packages`.
+$1
+$1
+$1
+- **Backend Configuration:**
+  - Added `GeminiAPIKey` to `config.Config` (read from `GEMINI_API_KEY`).
+  - Updated `app.New` to seed the database settings with the environment-provided API key if the setting is empty.
+  - This resolves the "gemini api key not configured" error during embedding if the UI setup hasn't been completed yet.

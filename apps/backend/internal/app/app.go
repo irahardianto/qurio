@@ -45,6 +45,26 @@ func New(
 
 	settingsRepo := settings.NewPostgresRepo(sqlDB)
 	settingsService := settings.NewService(settingsRepo)
+	
+	// Seed Gemini API Key from Config
+	if cfg.GeminiAPIKey != "" {
+		ctx := context.Background()
+		set, err := settingsService.Get(ctx)
+		if err == nil {
+			// Update if empty
+			if set.GeminiAPIKey == "" {
+				set.GeminiAPIKey = cfg.GeminiAPIKey
+				if err := settingsService.Update(ctx, set); err != nil {
+					slog.Warn("failed to seed gemini api key", "error", err)
+				} else {
+					slog.Info("seeded gemini api key from environment")
+				}
+			}
+		} else {
+			slog.Warn("failed to fetch settings for seeding", "error", err)
+		}
+	}
+
 	settingsHandler := settings.NewHandler(settingsService)
 
 	// Feature: Source

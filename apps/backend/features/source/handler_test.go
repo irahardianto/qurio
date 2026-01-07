@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -345,4 +346,53 @@ func TestHandler_GetPages(t *testing.T) {
 
 	handler.GetPages(w, req)
 	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+}
+
+func TestHandler_Upload_DefaultDirectory(t *testing.T) {
+	// Ensure environment variable is unset to trigger fallback
+	oldEnv := os.Getenv("QURIO_UPLOAD_DIR")
+	os.Unsetenv("QURIO_UPLOAD_DIR")
+	defer func() {
+		if oldEnv != "" {
+			os.Setenv("QURIO_UPLOAD_DIR", oldEnv)
+		}
+	}()
+
+	// Mock Dependencies
+	mockRepo := new(MockRepo)
+	mockPub := new(MockPublisher)
+	// Service needs repo and publisher (mocked)
+	svc := source.NewService(mockRepo, mockPub, nil, nil)
+	handler := source.NewHandler(svc)
+
+	// Mock Expectations
+	mockRepo.On("ExistsByHash", mock.Anything, mock.Anything).Return(false, nil)
+	mockRepo.On("Save", mock.Anything, mock.Anything).Return(nil)
+	// Publisher is called in Service.Upload ("ingest.task")
+	mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+
+	// Prepare Request
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "default_dir.txt")
+	part.Write([]byte("content"))
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/sources/upload", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	// Execute
+	handler.Upload(w, req)
+
+	// Assertions
+	assert.Equal(t, http.StatusCreated, w.Result().StatusCode)
+
+	// Verify ./uploads directory was created and contains file
+	entries, err := os.ReadDir("./uploads")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, entries)
+
+	// Cleanup
+	os.RemoveAll("./uploads")
 }

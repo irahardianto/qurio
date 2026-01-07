@@ -70,6 +70,7 @@ services:
     build: ./apps/backend
     ports: ["8081:8081"]
     environment:
+      - QURIO_UPLOAD_DIR=/var/lib/qurio/uploads
       - DB_HOST=postgres
       - WEAVIATE_HOST=weaviate:8080
       - NSQ_LOOKUPD=nsqlookupd:4161

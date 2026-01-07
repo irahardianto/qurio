@@ -9,3 +9,18 @@
 - **Ingestion Worker Testing:**
     - **PYTHONPATH:** When running `pytest` for the ingestion worker, explicitly set `PYTHONPATH=.` (e.g., `PYTHONPATH=. ./venv/bin/pytest`) to ensure local modules (like `handlers`, `config`, `logger`) are correctly resolved.
     - **Dead Code:** Unused imports and variables (e.g., redundant semaphores, unused `exclusions` params) can accumulate. Periodic cleanup using static analysis or manual review is recommended to keep the worker codebase lean.
+
+### Docker & Ingestion Reliability (2026-01-07)
+- **Shared Volume Permissions:**
+    - **Issue:** When sharing a volume between containers (e.g., `backend` and `ingestion-worker`), UID mismatches cause `Permission denied` errors. Alpine uses variable UIDs for `adduser`, while Debian uses `1000`.
+    - **Fix:** Explicitly set UIDs (e.g., `RUN adduser -u 1000 ...`) in Dockerfiles.
+- **Model Caching & Non-Root Users:**
+    - **Issue:** Python libraries like `RapidOCR` and `Docling` may try to download models to `site-packages` or user home directories at runtime. This fails in non-root containers if the directory isn't writable or if the library ignores cache env vars.
+    - **Fix:**
+        1. Set explicit cache paths: `ENV HF_HOME=/app/.cache`.
+        2. Create and `chown` these directories to the non-root user.
+        3. Run download scripts as `root` *during build* to populate these shared caches.
+        4. If a library insists on using `site-packages` (like `rapidocr-onnxruntime`), explicitly `chown` that specific package directory to the non-root user.
+- **Configuration Seeding:**
+    - **Issue:** Ingestion fails silently (or with logs only) if the embedding API Key is missing from the database settings, even if the environment variable is set.
+    - **Fix:** Implement logic in the application bootstrap (`app.New`) to seed database settings from environment variables (`GEMINI_API_KEY`) if the setting is currently empty. This ensures a "zero-config" start for fresh deployments.

@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev libxslt-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m appuser
+# Create a non-root user with explicit UID
+RUN useradd -m -u 1000 appuser
 
 WORKDIR /app
 
@@ -35,9 +35,6 @@ RUN mkdir -p /var/lib/qurio/uploads && \
     chown -R appuser:appuser /var/lib/qurio && \
     chown -R appuser:appuser /app
 
-# Switch to non-root user
-USER appuser
-
 # Pre-download models to prevent runtime race conditions in workers
 # We set strict threading limits globally to be safe
 # Bump to 2 threads for better performance on high-core machines
@@ -49,7 +46,24 @@ ENV VECLIB_MAXIMUM_THREADS=2
 ENV NUMEXPR_NUM_THREADS=2
 ENV ONNX_NUM_THREADS=1
 
-# Trigger model download during build (as appuser)
-RUN python -c "from docling.utils.model_downloader import download_models; download_models()"
+# Set cache directories to a shared location within /app
+ENV HF_HOME=/app/.cache/huggingface
+ENV DOCLING_HOME=/app/.cache/docling
+ENV RAPIDOCR_CACHE_DIR=/app/.cache/rapidocr
+
+# Create cache directory and set permissions
+RUN mkdir -p /app/.cache && \
+    chown -R appuser:appuser /app/.cache
+
+# Trigger model download during build (as root to write to site-packages AND shared cache)
+# We run as root but ensure the cache dir is writable by appuser later
+RUN python -c "from docling.utils.model_downloader import download_models; download_models()" && \
+    chown -R appuser:appuser /app/.cache && \
+    # Fix RapidOCR permission issue by granting ownership of the package directory to appuser
+    # It tries to download models to its own package dir despite cache settings
+    chown -R appuser:appuser /usr/local/lib/python3.12/site-packages/rapidocr
+
+# Switch to non-root user
+USER appuser
 
 CMD ["python", "main.py"]

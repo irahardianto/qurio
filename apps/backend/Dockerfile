@@ -9,8 +9,8 @@ RUN go build -o /server main.go
 
 FROM alpine:latest
 
-# Create a non-root user
-RUN adduser -D -g '' appuser
+# Create a non-root user with explicit UID
+RUN adduser -D -u 1000 -g '' appuser
 
 WORKDIR /app
 

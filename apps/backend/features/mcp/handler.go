@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -615,12 +616,14 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		scheme = "https"
 	}
 	endpoint := fmt.Sprintf("%s://%s/mcp/messages?sessionId=%s", scheme, r.Host, sessionID)
-	
-	fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", endpoint)
+	safeEndpoint := html.EscapeString(endpoint)
+
+	fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", safeEndpoint)
 	w.(http.Flusher).Flush()
-	
+
 	// Send 'id' event (Optional but good practice if client expects it)
-	fmt.Fprintf(w, "event: id\ndata: %s\n\n", sessionID)
+	safeSessionID := html.EscapeString(sessionID)
+	fmt.Fprintf(w, "event: id\ndata: %s\n\n", safeSessionID)
 	w.(http.Flusher).Flush()
 
 	// 4. Loop: Send messages from channel to SSE stream
