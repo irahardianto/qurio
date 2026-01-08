@@ -55,7 +55,19 @@ onMounted(async () => {
     </div>
 
     <div class="space-y-2">
-      <label for="geminiKey" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Gemini API Key</label>
+      <div class="flex items-center gap-2">
+        <label for="geminiKey" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Gemini API Key</label>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <HelpCircle class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p class="max-w-xs">The key can be updated dynamically without restarting.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
       <Input
         id="geminiKey"
         v-model="store.geminiApiKey"

@@ -3,6 +3,16 @@ import { describe, it, expect, vi } from 'vitest'
 import { createTestingPinia } from '@pinia/testing'
 import SourceForm from './SourceForm.vue'
 import { useSourceStore } from './source.store'
+import { useSettingsStore } from '@/features/settings/settings.store'
+import { nextTick } from 'vue'
+
+// Mock vue-router
+const pushMock = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: pushMock
+  })
+}))
 
 // Global Stubs
 const globalStubs = {
@@ -30,6 +40,12 @@ const globalStubs = {
   ChevronDown: { template: '<svg></svg>' },
   ChevronUp: { template: '<svg></svg>' },
   UploadCloud: { template: '<svg></svg>' },
+  Dialog: { template: '<div><slot /></div>' },
+  DialogContent: { template: '<div><slot /></div>' },
+  DialogHeader: { template: '<div><slot /></div>' },
+  DialogTitle: { template: '<div><slot /></div>' },
+  DialogDescription: { template: '<div><slot /></div>' },
+  DialogFooter: { template: '<div><slot /></div>' },
 }
 
 describe('SourceForm', () => {
@@ -41,6 +57,8 @@ describe('SourceForm', () => {
       },
     })
     const store = useSourceStore()
+    const settingsStore = useSettingsStore()
+    settingsStore.geminiApiKey = 'test-key'
     
     const input = wrapper.find('input[type="text"]')
     await input.setValue('https://example.com')
@@ -77,6 +95,8 @@ describe('SourceForm', () => {
       },
     })
     const store = useSourceStore()
+    const settingsStore = useSettingsStore()
+    settingsStore.geminiApiKey = 'test-key'
     const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     const input = wrapper.find('input[type="text"]')
@@ -96,6 +116,8 @@ describe('SourceForm', () => {
       },
     })
     const store = useSourceStore()
+    const settingsStore = useSettingsStore()
+    settingsStore.geminiApiKey = 'test-key'
 
     // Switch to File Tab
     const buttons = wrapper.findAll('button')
@@ -134,6 +156,9 @@ describe('SourceForm', () => {
       }
     })
     
+    const settingsStore = useSettingsStore()
+    settingsStore.geminiApiKey = 'test-key'
+
     // Default tab is Web, so just submit empty
     await wrapper.find('form').trigger('submit')
     
@@ -150,6 +175,8 @@ describe('SourceForm', () => {
       }
     })
     const store = useSourceStore()
+    const settingsStore = useSettingsStore()
+    settingsStore.geminiApiKey = 'test-key'
     store.addSource.mockResolvedValue()
     
     await wrapper.find('input[type="text"]').setValue('http://example.com')
@@ -158,5 +185,48 @@ describe('SourceForm', () => {
     expect(store.addSource).toHaveBeenCalled()
     // Verify input cleared
     expect(wrapper.find('input[type="text"]').element.value).toBe('')
+  })
+
+  it('shows alert dialog when gemini api key is missing on web ingest', async () => {
+    const wrapper = mount(SourceForm, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: globalStubs
+      }
+    })
+    
+    const settingsStore = useSettingsStore()
+    const sourceStore = useSourceStore()
+    settingsStore.geminiApiKey = ''
+    
+    // Set URL
+    await wrapper.find('input[type="text"]').setValue('https://example.com')
+    
+    // Click submit
+    await wrapper.find('form').trigger('submit')
+    
+    // Expect sourceStore.addSource NOT to be called
+    expect(sourceStore.addSource).not.toHaveBeenCalled()
+    
+    // Check if showApiKeyAlert became true. 
+    // Since we mocked Dialog, we can check the vm state directly
+    expect(wrapper.vm.showApiKeyAlert).toBe(true)
+  })
+
+  it('displays correct crawl depth hints', async () => {
+    const wrapper = mount(SourceForm, {
+        global: {
+          plugins: [createTestingPinia({ createSpy: vi.fn })],
+          stubs: globalStubs
+        }
+      })
+    // Open advanced settings
+    wrapper.vm.showAdvanced = true
+    await nextTick()
+    
+    // Check for spans in the flex container
+    const hints = wrapper.findAll('.flex.flex-row.gap-4.text-xs span')
+    expect(hints.length).toBe(3)
+    expect(hints[2].text()).toContain('2+ = Deep recursive (Caution)')
   })
 })

@@ -1,13 +1,25 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSourceStore } from './source.store'
+import { useSettingsStore } from '@/features/settings/settings.store'
 import { Plus, Loader2, ChevronDown, ChevronUp, Globe, FileUp, Settings2, UploadCloud } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 
 const store = useSourceStore()
+const settingsStore = useSettingsStore()
+const router = useRouter()
 const url = ref('')
 const maxDepth = ref(0)
 const exclusions = ref('')
@@ -15,10 +27,20 @@ const showAdvanced = ref(false)
 const activeTab = ref<'web' | 'file'>('web')
 const file = ref<File | null>(null)
 const isDragging = ref(false)
+const showApiKeyAlert = ref(false)
 
 const emit = defineEmits(['submit'])
 
 async function submit() {
+  // Check Gemini API Key before proceeding
+  if (!settingsStore.geminiApiKey) {
+    showApiKeyAlert.value = true
+    return
+  }
+  
+  // Ensure dialog is closed if key is present
+  showApiKeyAlert.value = false
+
   if (activeTab.value === 'web') {
     if (!url.value) return
     
@@ -59,6 +81,11 @@ async function submit() {
       }
     }
   }
+}
+
+function goToSettings() {
+  showApiKeyAlert.value = false
+  router.push('/settings')
 }
 
 function onFileChange(e: Event) {
@@ -159,10 +186,11 @@ function onDrop(e: DragEvent) {
                 max="5"
                 class="font-mono"
               />
-              <p class="text-xs text-muted-foreground">
-                0 = Single page only<br>
-                1 = Follow direct links (Recommended)
-              </p>
+              <div class="flex flex-row gap-4 text-xs text-muted-foreground">
+                <span>0 = Single page</span>
+                <span>1 = Direct links (Recommended)</span>
+                <span>2+ = Deep recursive (Caution)</span>
+              </div>
             </div>
             
             <div class="space-y-2">
@@ -235,5 +263,25 @@ function onDrop(e: DragEvent) {
         <p class="text-sm text-destructive font-medium">{{ store.error }}</p>
       </div>
     </form>
+    
+    <Dialog v-model:open="showApiKeyAlert">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Gemini API Key Required</DialogTitle>
+          <DialogDescription>
+            You need to configure your Gemini API Key in the settings before you can ingest content. This key is required for parsing and embedding the data.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" @click="showApiKeyAlert = false">
+            Cancel
+          </Button>
+          <Button @click="goToSettings">
+            Go to Settings
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
+
