@@ -48,3 +48,13 @@ def configure_logger():
         root_logger.handlers.clear()
     root_logger.addHandler(handler)
     root_logger.setLevel(logging.INFO)
+
+    # Explicitly configure library loggers to ensure JSON formatting in production
+    # and prevent double logging or raw text output
+    for logger_name in ["tornado", "tornado.access", "tornado.application", "tornado.general", "nsq"]:
+        logger = logging.getLogger(logger_name)
+        if logger.hasHandlers():
+            logger.handlers.clear()
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False

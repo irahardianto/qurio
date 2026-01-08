@@ -12,6 +12,7 @@ type SearchResult struct {
 	Title     string                 `json:"title,omitempty"`
 	URL       string                 `json:"url,omitempty"`       // New
 	SourceID  string                 `json:"sourceId,omitempty"`  // New
+	SourceName string                `json:"sourceName,omitempty"` // New
 	Author    string                 `json:"author,omitempty"`    // New
 	CreatedAt string                 `json:"createdAt,omitempty"` // New
 	PageCount int                    `json:"pageCount,omitempty"` // New

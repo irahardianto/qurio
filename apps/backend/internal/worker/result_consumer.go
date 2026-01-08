@@ -74,15 +74,8 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		OriginalPayload json.RawMessage        `json:"original_payload,omitempty"`
 		Metadata        map[string]interface{} `json:"metadata,omitempty"`
 	}
-	if err := json.Unmarshal(m.Body, &payload); err != nil {
-		slog.Error("invalid message format", "error", err)
-		return nil // Don't retry invalid messages
-	}
 
-	if payload.SourceID == "" || payload.URL == "" {
-		slog.Error("missing required fields, dropping", "source_id", payload.SourceID, "url", payload.URL)
-		return nil
-	}
+	err := json.Unmarshal(m.Body, &payload)
 
 	correlationID := payload.CorrelationID
 	if correlationID == "" {
@@ -91,6 +84,16 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	ctx := context.Background()
 	ctx = middleware.WithCorrelationID(ctx, correlationID)
+
+	if err != nil {
+		slog.ErrorContext(ctx, "invalid message format", "error", err)
+		return nil // Don't retry invalid messages
+	}
+
+	if payload.SourceID == "" || payload.URL == "" {
+		slog.ErrorContext(ctx, "missing required fields, dropping", "source_id", payload.SourceID, "url", payload.URL)
+		return nil
+	}
 
 	// Handle Failure
 	if payload.Status == "failed" {

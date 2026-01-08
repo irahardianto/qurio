@@ -63,11 +63,19 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			return application.ResultConsumer.HandleMessage(m)
 		}), cfg.IngestionConcurrency)
 
-		// Connect to Lookupd
-		if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
-			slog.Error("failed to connect to NSQLookupd", "error", err)
-		} else {
-			slog.Info("NSQ Result Consumer connected", "concurrency", cfg.IngestionConcurrency)
+		// Connect to Lookupd or NSQD
+		if cfg.NSQLookupd != "" {
+			if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
+				slog.Error("failed to connect to NSQLookupd", "error", err)
+			} else {
+				slog.Info("NSQ Result Consumer connected via Lookupd", "lookupd", cfg.NSQLookupd, "concurrency", cfg.IngestionConcurrency)
+			}
+		} else if cfg.NSQDHost != "" {
+			if err := consumer.ConnectToNSQD(cfg.NSQDHost); err != nil {
+				slog.Error("failed to connect to NSQD", "error", err)
+			} else {
+				slog.Info("NSQ Result Consumer connected via NSQD", "nsqd", cfg.NSQDHost, "concurrency", cfg.IngestionConcurrency)
+			}
 		}
 	}
 

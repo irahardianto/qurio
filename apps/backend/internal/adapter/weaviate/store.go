@@ -196,6 +196,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 						result.Metadata["title"] = titleVal
 					}
 					if sourceName, ok := props["sourceName"].(string); ok {
+						result.SourceName = sourceName
 						result.Metadata["sourceName"] = sourceName
 					}
 					if author, ok := props["author"].(string); ok {
@@ -379,6 +380,7 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 						result.Metadata["title"] = title
 					}
 					if sourceName, ok := props["sourceName"].(string); ok {
+						result.SourceName = sourceName
 						result.Metadata["sourceName"] = sourceName
 					}
 					if author, ok := props["author"].(string); ok {

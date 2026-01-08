@@ -45,13 +45,15 @@ ignore:
   - "**/*.spec.ts"             # All Frontend spec files
   - "**/tests/**/*"            # Python/E2E test directories
   - "**/test-files/**/*"       # Test assets (Markdown/PDFs in e2e)
-  - "apps/backend/internal/testutils/**/*" # <--- The specific file you asked about
+  - "apps/backend/internal/testutils/**/*" 
   - "apps/e2e/**/*"            # Playwright E2E folder
 
   # --- Backend (Go) ---
   - "apps/backend/main.go"     # App entry point (not unit testable)
   - "apps/backend/migrations/**/*" # SQL Migrations
   - "apps/backend/internal/app/mocks_test.go" # Generated mocks
+  - "**/testutils/**/*" 
+  - "**/testutils/*.go"
 
   # --- Frontend (Vue/TypeScript) ---
   - "apps/frontend/*.config.js"  # Tailwind, PostCSS configs
