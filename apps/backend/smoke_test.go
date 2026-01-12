@@ -28,6 +28,7 @@ func TestSmoke_Startup(t *testing.T) {
 
 	// 2. Configure App to use Infrastructure
 	cfg := suite.GetAppConfig()
+	cfg.EnableAPI = true // Ensure API is enabled for smoke test
 
 	// Adjust MigrationPath
 	_, b, _, _ := runtime.Caller(0)
