@@ -64,6 +64,7 @@ services:
       - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     deploy:
+      replicas: ${INGESTION_WORKER_WEB_REPLICAS:-1}
       resources:
         limits:
           cpus: '8.0'
@@ -85,6 +86,7 @@ services:
       - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     deploy:
+      replicas: ${INGESTION_WORKER_FILE_REPLICAS:-1}
       resources:
         limits:
           cpus: '8.0'
@@ -96,8 +98,42 @@ services:
     build: ./apps/backend
     ports: ["8081:8081"]
     environment:
+      - ENABLE_API=true
+      - ENABLE_EMBEDDER_WORKER=false
       - QURIO_UPLOAD_DIR=${QURIO_UPLOAD_DIR:-/var/lib/qurio/uploads}
       # Use DOCKER_ prefix to avoid collision with local .env variables
+      - DB_HOST=${DOCKER_DB_HOST:-postgres}
+      - DB_PORT=${DOCKER_DB_PORT:-5432}
+      - DB_USER=${DB_USER:-qurio}
+      - DB_PASS=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-qurio}
+      - WEAVIATE_HOST=${DOCKER_WEAVIATE_HOST:-weaviate:8080}
+      - WEAVIATE_SCHEME=${WEAVIATE_SCHEME:-http}
+      - NSQ_LOOKUPD=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
+      - NSQD_HOST=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
+      - NSQ_MAX_MSG_SIZE=${NSQ_MAX_MSG_SIZE:-10485760}
+      - MIGRATION_PATH=${MIGRATION_PATH:-file://migrations}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - RERANK_API_KEY=${RERANK_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+      nsqd:
+        condition: service_healthy
+    volumes:
+      - qurio_uploads:/var/lib/qurio/uploads
+
+  backend-worker:
+    build: ./apps/backend
+    deploy:
+      replicas: ${BACKEND_WORKER_REPLICAS:-1}
+    environment:
+      - ENABLE_API=false
+      - ENABLE_EMBEDDER_WORKER=true
+      - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
+      - QURIO_UPLOAD_DIR=${QURIO_UPLOAD_DIR:-/var/lib/qurio/uploads}
       - DB_HOST=${DOCKER_DB_HOST:-postgres}
       - DB_PORT=${DOCKER_DB_PORT:-5432}
       - DB_USER=${DB_USER:-qurio}

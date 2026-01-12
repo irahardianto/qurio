@@ -112,6 +112,7 @@ func createTopics(nsqdHost string) {
 		create(config.TopicIngestWeb)
 		create(config.TopicIngestFile)
 		create(config.TopicIngestResult)
+		create(config.TopicIngestEmbed)
 	}()
 }
 

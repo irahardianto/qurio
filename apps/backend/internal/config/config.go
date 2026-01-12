@@ -21,7 +21,10 @@ type Config struct {
 	DoclingURL string `envconfig:"DOCLING_URL" default:"http://docling:8000"`
 	NSQLookupd string `envconfig:"NSQ_LOOKUPD" default:"nsqlookupd:4161"`
 	NSQDHost   string `envconfig:"NSQD_HOST" default:"nsqd:4150"`
-	IngestionConcurrency int `envconfig:"INGESTION_CONCURRENCY" default:"50"`
+	
+	EnableAPI            bool `envconfig:"ENABLE_API" default:"true"`
+	EnableEmbedderWorker bool `envconfig:"ENABLE_EMBEDDER_WORKER" default:"false"`
+	IngestionConcurrency int  `envconfig:"INGESTION_CONCURRENCY" default:"50"`
 	MigrationPath string `envconfig:"MIGRATION_PATH" default:"file://migrations"`
 	GeminiAPIKey string `envconfig:"GEMINI_API_KEY"`
 	RerankAPIKey string `envconfig:"RERANK_API_KEY"`

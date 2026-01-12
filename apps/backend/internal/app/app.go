@@ -21,9 +21,10 @@ import (
 )
 
 type App struct {
-	Handler        http.Handler
-	SourceService  *source.Service
-	ResultConsumer *worker.ResultConsumer
+	Handler          http.Handler
+	SourceService    *source.Service
+	ResultConsumer   *worker.ResultConsumer
+	EmbedderConsumer *worker.EmbedderConsumer
 }
 
 func New(
@@ -162,12 +163,18 @@ func New(
 	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo, settings: settingsService}
 	pmAdapter := &pageManagerAdapter{repo: sourceRepo}
 	
-	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, taskPub)
+	resultConsumer := worker.NewResultConsumer(vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, taskPub)
+
+	var embedderConsumer *worker.EmbedderConsumer
+	if cfg.EnableEmbedderWorker {
+		embedderConsumer = worker.NewEmbedderConsumer(geminiEmbedder, vecStore)
+	}
 
 	return &App{
-		Handler:        mux,
-		SourceService:  sourceService,
-		ResultConsumer: resultConsumer,
+		Handler:          mux,
+		SourceService:    sourceService,
+		ResultConsumer:   resultConsumer,
+		EmbedderConsumer: embedderConsumer,
 	}, nil
 }
 

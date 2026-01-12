@@ -35,4 +35,4 @@
     *   `qurio_read_page`: Deep Reading tool. Retrieves full document content by URL.
 *   **Frontend:** Dashboard implemented with Statistics and Failed Jobs management.
 *   **Reliability:** Idempotent ingestion, retry mechanisms for failed jobs, and orphan chunk cleanup.
-*   **Scalability:** Parallel ingestion pipeline with dedicated workers for Web crawling and File processing.
+*   **Scalability:** Distributed Micro-Pipeline with decoupled coordination and embedding workers. Configurable concurrency and horizontal scaling (replicas) for all worker types.

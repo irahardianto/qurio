@@ -83,7 +83,6 @@ func (m *MockTaskPublisher) Publish(topic string, body []byte) error {
 
 func TestHandleMessage_Success(t *testing.T) {
 	// Setup Mocks
-	e := new(MockEmbedder)
 	s := new(MockVectorStore)
 	u := new(MockUpdater)
 	j := new(MockJobRepo)
@@ -91,7 +90,7 @@ func TestHandleMessage_Success(t *testing.T) {
 	pm := new(MockPageManager)
 	tp := new(MockTaskPublisher)
 
-	consumer := worker.NewResultConsumer(e, s, u, j, sf, pm, tp)
+	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
 
 	// Payload
 	payload := map[string]interface{}{
@@ -107,8 +106,10 @@ func TestHandleMessage_Success(t *testing.T) {
 	// Expectations
 	sf.On("GetSourceConfig", mock.Anything, "src1").Return(2, []string{}, "", "My Source", nil)
 	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
-	e.On("Embed", mock.Anything, mock.Anything).Return([]float32{0.1, 0.2}, nil)
-	s.On("StoreChunk", mock.Anything, mock.Anything).Return(nil)
+	
+	// Expect Publish instead of Embed/Store
+	tp.On("Publish", "ingest.embed", mock.Anything).Return(nil)
+
 	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
 	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "completed", "").Return(nil)
 	pm.On("CountPendingPages", mock.Anything, "src1").Return(0, nil)
@@ -119,11 +120,11 @@ func TestHandleMessage_Success(t *testing.T) {
 	
 	s.AssertExpectations(t)
 	pm.AssertExpectations(t)
+	tp.AssertExpectations(t)
 }
 
 func TestHandleMessage_Failure(t *testing.T) {
 	// Setup Mocks
-	e := new(MockEmbedder)
 	s := new(MockVectorStore)
 	u := new(MockUpdater)
 	j := new(MockJobRepo)
@@ -131,7 +132,7 @@ func TestHandleMessage_Failure(t *testing.T) {
 	pm := new(MockPageManager)
 	tp := new(MockTaskPublisher)
 
-	consumer := worker.NewResultConsumer(e, s, u, j, sf, pm, tp)
+	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
 
 	payload := map[string]interface{}{
 		"source_id": "src1",

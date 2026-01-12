@@ -80,6 +80,32 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 		}
 	}
 
+	// 5. Worker (Embedder Consumer) Setup
+	if application.EmbedderConsumer != nil {
+		consumer, err := nsq.NewConsumer(config.TopicIngestEmbed, "backend-embedder", nsqCfg)
+		if err != nil {
+			slog.Error("failed to create NSQ consumer for embed", "error", err)
+		} else {
+			consumer.AddConcurrentHandlers(nsq.HandlerFunc(func(m *nsq.Message) error {
+				return application.EmbedderConsumer.HandleMessage(m)
+			}), cfg.IngestionConcurrency)
+
+			if cfg.NSQLookupd != "" {
+				if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
+					slog.Error("failed to connect Embedder Consumer to NSQLookupd", "error", err)
+				} else {
+					slog.Info("NSQ Embedder Consumer connected via Lookupd", "lookupd", cfg.NSQLookupd)
+				}
+			} else if cfg.NSQDHost != "" {
+				if err := consumer.ConnectToNSQD(cfg.NSQDHost); err != nil {
+					slog.Error("failed to connect Embedder Consumer to NSQD", "error", err)
+				} else {
+					slog.Info("NSQ Embedder Consumer connected via NSQD", "nsqd", cfg.NSQDHost)
+				}
+			}
+		}
+	}
+
 	// Background Janitor
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
@@ -97,8 +123,13 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	}()
 
 	// 5. Start Server
-	if err := application.Run(ctx); err != nil {
-		return fmt.Errorf("server failed: %w", err)
+	if cfg.EnableAPI {
+		if err := application.Run(ctx); err != nil {
+			return fmt.Errorf("server failed: %w", err)
+		}
+	} else {
+		slog.Info("API disabled, running in worker mode")
+		<-ctx.Done()
 	}
 	return nil
 }

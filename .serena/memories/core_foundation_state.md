@@ -7,5 +7,5 @@ Key changes planned:
 5. Testing: Added coverage for "glue" logic in MCP Handler, Job Service, and Reranker Dynamic Client.
 6. Frontend: Verified/Consolidated `tsconfig` path aliases.
 
-The system has implemented parallel ingestion support (web vs file topics).
+The system has implemented parallel ingestion support (web vs file topics) and resolved PDF size limits by making NSQ message size configurable (default 10MB).
 The system continues to adhere to the "Technical Constitution" with strict TDD and I/O isolation.

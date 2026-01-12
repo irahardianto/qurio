@@ -31,13 +31,10 @@ func (m *TestMockPageManager) CountPendingPages(ctx context.Context, sourceID st
 
 func TestHandleMessage_LLMsTxt_BypassesDepth(t *testing.T) {
 	// Arrange
-    // We reuse mocks from result_consumer_test.go (MockEmbedder, etc.) 
-    // assuming they are in the same package (worker) and result_consumer_test.go belongs to package worker.
-    
     mockPub := &TrackingMockPublisher{}
     mockPageMgr := &TestMockPageManager{}
     
-    consumer := NewResultConsumer(&MockEmbedder{}, &MockStore{}, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, mockPageMgr, mockPub)
+    consumer := NewResultConsumer(&MockStore{}, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, mockPageMgr, mockPub)
 
 	payload := map[string]interface{}{
 		"source_id":  "src-1",
@@ -60,5 +57,6 @@ func TestHandleMessage_LLMsTxt_BypassesDepth(t *testing.T) {
 
 	// Assert
     // If logic is patched, 0 < 1 (virtual maxDepth), so discovery happens -> Message published.
-    assert.Equal(t, 1, mockPub.PublishCallCount, "Should publish 1 new task for the discovered link in llms.txt")
+	// Note: It publishes 1 embedding task + 1 web task = 2 tasks.
+    assert.Equal(t, 2, mockPub.PublishCallCount, "Should publish 1 embedding task + 1 new web task for the discovered link")
 }

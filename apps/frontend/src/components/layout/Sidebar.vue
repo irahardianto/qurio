@@ -47,7 +47,7 @@ const isActive = (path: string) => route.path === path
         <div class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
         <span class="text-xs font-mono text-muted-foreground">System Online</span>
       </div>
-      <div class="mt-1 text-xs font-mono text-muted-foreground/50">v0.5.29</div>
+      <div class="mt-1 text-xs font-mono text-muted-foreground/50">v0.6.2</div>
     </div>
   </aside>
 </template>

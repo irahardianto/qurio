@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nsqio/go-nsq"
@@ -35,7 +34,6 @@ type TaskPublisher interface {
 }
 
 type ResultConsumer struct {
-	embedder      Embedder
 	store         VectorStore
 	updater       SourceStatusUpdater
 	jobRepo       job.Repository
@@ -44,9 +42,8 @@ type ResultConsumer struct {
 	publisher     TaskPublisher
 }
 
-func NewResultConsumer(e Embedder, s VectorStore, u SourceStatusUpdater, j job.Repository, sf SourceFetcher, pm PageManager, tp TaskPublisher) *ResultConsumer {
+func NewResultConsumer(s VectorStore, u SourceStatusUpdater, j job.Repository, sf SourceFetcher, pm PageManager, tp TaskPublisher) *ResultConsumer {
 	return &ResultConsumer{
-		embedder:      e,
 		store:         s,
 		updater:       u,
 		jobRepo:       j,
@@ -135,8 +132,6 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	slog.InfoContext(ctx, "received result", "source_id", payload.SourceID, "url", payload.URL, "content_len", len(payload.Content))
 
-	// 0. Update Page Status to Processing (or skip, just update to completed at end)
-	
 	// Fetch Source Config & Name
 	maxDepth, exclusions, apiKey, sourceName, err := h.sourceFetcher.GetSourceConfig(ctx, payload.SourceID)
 	if err != nil {
@@ -151,71 +146,49 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		}
 	}
 
-	// 2. Chunk, Embed, Store
+	// 2. Chunk and Publish
 	if payload.Content != "" {
 		chunks := text.ChunkMarkdown(payload.Content, 512, 50)
 		if len(chunks) > 0 {
 			for i, c := range chunks {
-				err := func() error {
-					embedCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-					defer cancel()
+				// Construct IngestEmbedPayload
+				embedPayload := IngestEmbedPayload{
+					SourceID:      payload.SourceID,
+					SourceURL:     payload.URL,
+					SourceName:    sourceName,
+					Title:         payload.Title,
+					Path:          payload.Path,
+					
+					Content:       c.Content,
+					ChunkIndex:    i,
+					ChunkType:     string(c.Type),
+					Language:      c.Language,
+					
+					CorrelationID: correlationID,
+				}
 
-					// Contextual Embedding (FR-06)
-					// Embedding Format:
-					// Title: <Page Title>
-					// URL: <Page URL>
-					// Type: <Content Type>
-					// Author: <Author> (Optional)
-					// Created: <Created At> (Optional)
-					// ---
-					// <Raw Chunk Content>
-					contextualString := fmt.Sprintf("Title: %s\nSource: %s\nPath: %s\nURL: %s\nType: %s", 
-						payload.Title, sourceName, payload.Path, payload.URL, string(c.Type))
-
-					if author, ok := payload.Metadata["author"].(string); ok && author != "" {
-						contextualString += fmt.Sprintf("\nAuthor: %s", author)
-					}
-					if created, ok := payload.Metadata["created_at"].(string); ok && created != "" {
-						contextualString += fmt.Sprintf("\nCreated: %s", created)
-					}
-
-					contextualString += fmt.Sprintf("\n---\n%s", c.Content)
-
-					vector, err := h.embedder.Embed(embedCtx, contextualString)
-					if err != nil {
-						return err
-					}
-
-					chunk := Chunk{
-						Content:    c.Content, // Store original content (FR-08)
-						Vector:     vector,
-						SourceID:   payload.SourceID,
-						SourceURL:  payload.URL,
-						ChunkIndex: i,
-						Type:       string(c.Type),
-						Language:   c.Language,
-						Title:      payload.Title,
-						SourceName: sourceName,
-					}
-
-					if author, ok := payload.Metadata["author"].(string); ok {
-						chunk.Author = author
-					}
-					if created, ok := payload.Metadata["created_at"].(string); ok {
-						chunk.CreatedAt = created
-					}
-					if pages, ok := payload.Metadata["pages"].(float64); ok {
-						chunk.PageCount = int(pages)
-					}
-
-					return h.store.StoreChunk(embedCtx, chunk)
-				}()
+				if author, ok := payload.Metadata["author"].(string); ok {
+					embedPayload.Author = author
+				}
+				if created, ok := payload.Metadata["created_at"].(string); ok {
+					embedPayload.CreatedAt = created
+				}
+				if pages, ok := payload.Metadata["pages"].(float64); ok {
+					embedPayload.PageCount = int(pages)
+				}
+				
+				bytes, err := json.Marshal(embedPayload)
 				if err != nil {
-					slog.ErrorContext(ctx, "store chunk failed", "error", err)
-					return err
+					slog.ErrorContext(ctx, "failed to marshal embed payload", "error", err)
+					continue
+				}
+
+				if err := h.publisher.Publish(config.TopicIngestEmbed, bytes); err != nil {
+					slog.ErrorContext(ctx, "failed to publish to ingest.embed", "error", err)
+					return err // Durable: Fail if publish fails
 				}
 			}
-			slog.InfoContext(ctx, "stored chunks", "count", len(chunks))
+			slog.InfoContext(ctx, "published embedding tasks", "count", len(chunks))
 		}
 	}
 
@@ -276,7 +249,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		}
 	}
 
-	// 5. Update Page Status to Completed
+	// 5. Update Page Status to Completed (Coordinator considers it done once chunks are queued)
 	if payload.URL != "" {
 		if err := h.pageManager.UpdatePageStatus(ctx, payload.SourceID, payload.URL, "completed", ""); err != nil {
 			slog.WarnContext(ctx, "failed to update page status", "error", err)
@@ -285,7 +258,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	// 6. Check Source Completion
 
-pendingCount, err := h.pageManager.CountPendingPages(ctx, payload.SourceID)
+	pendingCount, err := h.pageManager.CountPendingPages(ctx, payload.SourceID)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to count pending pages", "error", err)
 	} else if pendingCount == 0 {

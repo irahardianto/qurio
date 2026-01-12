@@ -39,3 +39,18 @@ func TestLoadConfig_RerankAPIKey(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "test-key", cfg.RerankAPIKey)
 }
+
+func TestLoadConfig_Toggles(t *testing.T) {
+	os.Setenv("ENABLE_API", "false")
+	os.Setenv("ENABLE_EMBEDDER_WORKER", "true")
+	os.Setenv("INGESTION_CONCURRENCY", "10")
+	defer os.Unsetenv("ENABLE_API")
+	defer os.Unsetenv("ENABLE_EMBEDDER_WORKER")
+	defer os.Unsetenv("INGESTION_CONCURRENCY")
+
+	cfg, err := config.Load()
+	assert.NoError(t, err)
+	assert.False(t, cfg.EnableAPI)
+	assert.True(t, cfg.EnableEmbedderWorker)
+	assert.Equal(t, 10, cfg.IngestionConcurrency)
+}
