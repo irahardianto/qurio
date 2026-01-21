@@ -45,7 +45,7 @@ func TestNew_Success(t *testing.T) {
 		{"POST", "/sources"},
 		{"GET", "/settings"},
 		// {"GET", "/stats"}, // Requires DB mocks, skipping for simple connectivity check
-		// {"GET", "/mcp/sse"}, // Blocking SSE, skipping
+		{"POST", "/mcp"},
 	}
 
 	ts := httptest.NewServer(application.Handler)

@@ -6,7 +6,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Vue](https://img.shields.io/badge/Vue.js-3.x-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
-[![Python](https://img.shields.io/badge/python-3.12%2B-306998?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.14%2B-306998?logo=python&logoColor=white)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![MCP](https://img.shields.io/badge/Protocol-MCP-orange)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-8A8B8C.svg)](LICENSE)
@@ -124,13 +124,12 @@ Add the following to your MCP settings:
 {
   "mcpServers": {
     "qurio": {
-      "type": "sse",
-      "url": "http://localhost:8081/mcp/sse"
+      "httpUrl": "http://localhost:8081/mcp"
     }
   }
 }
 ```
-*Note: Direct HTTP transport for MCP is also supported at `http://localhost:8081/mcp` if your client supports it.*
+*Note: Qurio uses a stateless, streamable HTTP transport at `http://localhost:8081/mcp`. Use a client that supports native HTTP MCP connections.*
 
 ### 3. Query
 Ask your AI agent a question. It will now have access to the documentation you indexed!
@@ -148,7 +147,7 @@ Once connected, your agent will have access to the following tools:
 
 ### 5. Roadmap
 - [x] Rework crawler & embedder parallelization
-- [ ] Migrate to Streamable HTTP 
+- [x] Migrate to Streamable HTTP 
 - [ ] Supports multiple different models beyond Gemini
 - [ ] Supports more granular i.e. section by section page retrieval
 

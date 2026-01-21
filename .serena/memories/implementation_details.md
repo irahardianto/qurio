@@ -1,17 +1,18 @@
-# Backend Testing & Resilience Improvements (Jan 21, 2026)
+# Implementation Details
 
-## Link Discovery Hardening
-- **Logic**: Updated `DiscoverLinks` to strictly enforce `http/https` schemes, rejecting `ftp`, `mailto`, etc.
-- **Testing**: Added `TestDiscoverLinks_Comprehensive` (Table-driven) covering 15+ scenarios including Unicode, Fragments, Exclusions, and weird schemes.
+## Backend Structure
+- **Core:** `apps/backend/internal/app/app.go` wires everything.
+- **MCP:** `apps/backend/features/mcp/handler.go` implements Model Context Protocol.
+    - **Transport:** Stateless HTTP POST (Single Request/Response) via `/mcp`. (Refactored Jan 2026).
+    - **Tools:** `qurio_search` (Hybrid), `qurio_list_sources`, `qurio_list_pages`, `qurio_read_page`.
+- **Ingestion:** `apps/ingestion-worker` (Python) handles crawling/parsing.
+- **Retrieval:** `apps/backend/internal/retrieval` handles Weaviate/Rerank logic.
 
-## Result Consumer Reliability
-- **Partial Failure**: `ResultConsumer` now returns error (triggering NSQ retry) if `BulkCreatePages` fails, ensuring no discovered links are lost even if Embedding succeeded.
-- **Testing**: Added `TestResultConsumer_HandleMessage_PartialFailure_BulkCreatePages`.
+## Testing Patterns
+- **Unit:** Co-located `_test.go`. Use `httptest` for handlers.
+- **Integration:** `_integration_test.go` in same package.
+- **E2E:** `apps/e2e` (Playwright).
 
-## Infrastructure Resilience
-- **Config**: Added `BOOTSTRAP_RETRY_ATTEMPTS` (default 10) and `BOOTSTRAP_RETRY_DELAY_SECONDS` (default 2).
-- **Testing**: Added `bootstrap_resilience_test.go` using Testcontainers to verify behavior when DB or Weaviate is down/unreachable.
-
-## Utility Improvements
-- **QueryLogger**: Added `sync.Mutex` for thread-safety. Verified with concurrent test.
-- **Reranker**: Improved error reporting to include response body from Jina/Cohere APIs.
+## Configuration
+- **Hybrid:** `config.yaml` + Environment Variables.
+- **Secrets:** Injected via ENV.

@@ -164,11 +164,9 @@ func New(
 
 	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, settingsService, queryLogger)
 	mcpHandler := mcp.NewHandler(retrievalService, sourceService)
-	mux.Handle("/mcp", middleware.CorrelationID(mcpHandler)) // Legacy POST endpoint
 	
-	// New SSE Endpoints
-	mux.Handle("GET /mcp/sse", middleware.CorrelationID(enableCORS(mcpHandler.HandleSSE)))
-	mux.Handle("POST /mcp/messages", middleware.CorrelationID(enableCORS(mcpHandler.HandleMessage)))
+	// Unified Endpoint (Streaming)
+	mux.Handle("/mcp", middleware.CorrelationID(enableCORS(mcpHandler.ServeHTTP)))
 	
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

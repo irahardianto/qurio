@@ -43,9 +43,7 @@ All error responses follow this envelope:
 ## MCP (Model Context Protocol)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/mcp` | Legacy JSON-RPC 2.0 Endpoint |
-| `GET` | `/mcp/sse` | SSE Transport Connection (Yields Session ID) |
-| `POST` | `/mcp/messages` | Send JSON-RPC Messages (Requires `?sessionId=...`) |
+| `POST` | `/mcp` | Unified JSON-RPC 2.0 Endpoint (Streamable HTTP) |
 
 ## Health
 | Method | Endpoint | Description |

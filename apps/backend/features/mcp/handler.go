@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
+	"io"
 	"log/slog"
 	"net/http"
-	"sync"
-	"time"
+
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/retrieval"
-	"qurio/apps/backend/internal/middleware"
-	"github.com/google/uuid"
 )
 
 type Retriever interface {
@@ -28,15 +25,12 @@ type SourceManager interface {
 type Handler struct {
 	retriever    Retriever
 	sourceMgr    SourceManager
-	sessions     map[string]chan string // sessionId -> message channel (serialized JSON-RPC response)
-	sessionsLock sync.RWMutex
 }
 
 func NewHandler(r Retriever, s SourceManager) *Handler {
 	return &Handler{
 		retriever: r,
 		sourceMgr: s,
-		sessions:  make(map[string]chan string),
 	}
 }
 
@@ -317,7 +311,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					// Optional: Show other metadata
 					// if len(res.Metadata) > 0 {
 					// 	meta, _ := json.Marshal(res.Metadata)
-					// 	textResult += fmt.Sprintf("Metadata: %s\n", string(meta))
+					// 	txtResult += fmt.Sprintf("Metadata: %s\n", string(meta))
 					// }
 					textResult += "\n---\n"
 				}
@@ -567,192 +561,45 @@ func makeErrorResponse(id interface{}, code int, message string) JSONRPCResponse
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.Info("mcp request received", "method", r.Method, "path", r.URL.Path)
-	
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Standard JSON-RPC 2.0 via HTTP: One Request -> One Response
+	// "Streamable HTTP" optionally supports SSE for streaming, but for standard calls
+	// (like initialize, tool calls), we must return a single JSON object.
+	// We do NOT use a loop here to avoid sending multiple objects (NDJSON) which breaks
+	// strict JSON parsers (like in Gemini CLI).
+
 	var req JSONRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, nil, ErrParse, "Parse error")
+		if err != io.EOF {
+			slog.Warn("mcp decode error", "error", err)
+			h.writeError(w, nil, ErrParse, "Parse error")
+		}
 		return
 	}
 
 	resp := h.processRequest(r.Context(), req)
 	if resp != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			slog.Error("mcp encode error", "error", err)
+		}
 	} else {
-		// Notification, just return OK
+		// Notifications (no response)
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-// HandleSSE establishes the SSE connection and manages the session
-func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
-	// 1. Set SSE Headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	// 2. Create Session
-	sessionID := uuid.New().String()
-	msgChan := make(chan string, 100) // Increased buffer to prevent drops
-
-	h.sessionsLock.Lock()
-	h.sessions[sessionID] = msgChan
-	h.sessionsLock.Unlock()
-
-	// Cleanup on disconnect
-	defer func() {
-		h.sessionsLock.Lock()
-		delete(h.sessions, sessionID)
-		h.sessionsLock.Unlock()
-		close(msgChan)
-		slog.Info("sse session ended", "session_id", sessionID)
-	}()
-
-	slog.Info("sse session started", "session_id", sessionID)
-
-	// 3. Send 'endpoint' event
-	// Construct absolute URL for client compatibility
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	endpoint := fmt.Sprintf("%s://%s/mcp/messages?sessionId=%s", scheme, r.Host, sessionID)
-	safeEndpoint := html.EscapeString(endpoint)
-
-	fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", safeEndpoint)
-	w.(http.Flusher).Flush()
-
-	// Send 'id' event (Optional but good practice if client expects it)
-	safeSessionID := html.EscapeString(sessionID)
-	fmt.Fprintf(w, "event: id\ndata: %s\n\n", safeSessionID)
-	w.(http.Flusher).Flush()
-
-	// 4. Loop: Send messages from channel to SSE stream
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case msg, ok := <-msgChan:
-			if !ok {
-				return
-			}
-			fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
-			w.(http.Flusher).Flush()
-		case <-ticker.C:
-			// Send keep-alive comment to prevent timeouts
-			fmt.Fprintf(w, ": keepalive\n\n")
-			w.(http.Flusher).Flush()
-		case <-r.Context().Done():
-			return
-		}
-	}
-}
-
-// HandleMessage accepts POST messages associated with a session
-func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
-	correlationID := middleware.GetCorrelationID(r.Context())
-	
-	slog.Info("mcp message received", 
-		"method", r.Method, 
-		"path", r.URL.Path,
-		"correlation_id", correlationID,
-	)
-
-	sessionID := r.URL.Query().Get("sessionId")
-	if sessionID == "" {
-		slog.Warn("missing sessionId in message request", "correlation_id", correlationID)
-		h.writeHttpError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Missing sessionId", correlationID)
-		return
-	}
-
-	h.sessionsLock.RLock()
-	msgChan, exists := h.sessions[sessionID]
-	h.sessionsLock.RUnlock()
-
-	if !exists {
-		slog.Warn("session not found", "session_id", sessionID, "correlation_id", correlationID)
-		h.writeHttpError(w, http.StatusNotFound, "NOT_FOUND", "Session not found", correlationID)
-		return
-	}
-
-	var req JSONRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		slog.Warn("invalid json in message request", "error", err, "correlation_id", correlationID)
-		h.writeHttpError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON", correlationID)
-		return
-	}
-
-	// MCP Spec: Return 202 Accepted immediately
-	w.WriteHeader(http.StatusAccepted)
-	
-	// Create detached context to preserve values (correlationID) but ignore cancellation
-	bgCtx := context.WithoutCancel(r.Context())
-
-	// Process asynchronously
-	go func() {
-		resp := h.processRequest(bgCtx, req)
-		if resp == nil {
-			// Notification, no response needed
-			return
-		}
-		
-		// Serialize response
-		respBytes, err := json.Marshal(resp)
-		if err != nil {
-			slog.Error("failed to marshal response", "error", err, "correlation_id", correlationID)
-			return
-		}
-
-		// Send to SSE channel safely
-		h.sessionsLock.RLock()
-		defer h.sessionsLock.RUnlock()
-		
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Warn("failed to send to sse channel (closed)", "session_id", sessionID, "error", r, "correlation_id", correlationID)
-			}
-		}()
-
-		select {
-		case msgChan <- string(respBytes):
-		default:
-			slog.Warn("session channel full, dropping message", "session_id", sessionID, "correlation_id", correlationID)
-		}
-	}()
-}
-
 func (h *Handler) writeError(w http.ResponseWriter, id interface{}, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	// JSON-RPC errors are usually 200 OK at HTTP level, containing the error object
-	// But some implementations use 400/500. We'll use 200 to be safe with clients 
-	// that parse the body regardless of status, or 400/500 if strict HTTP semantics are needed.
-	// Standard JSON-RPC over HTTP typically uses 200 OK.
-	w.WriteHeader(http.StatusOK) 
-
-	resp := JSONRPCResponse{
-		JSONRPC: "2.0",
-		Error: map[string]interface{}{
-			"code":    code,
-			"message": message,
-		},
-		ID: id,
+	// Re-using the existing writeError helper logic but ensuring it writes to w directly
+	// Note: writeError in this file already does exactly what we need (writes JSONRPCResponse)
+	// We just need to ensure we don't duplicate logic.
+	// However, the helper above `writeError` was defined at file level? No, it's a method.
+	// Let's check if it's already defined in this file. It was in the previous version.
+	// I will just call it.
+	
+	resp := makeErrorResponse(id, code, message)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("failed to write error response", "error", err)
 	}
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (h *Handler) writeHttpError(w http.ResponseWriter, status int, code string, message string, correlationID string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	resp := map[string]interface{}{
-		"status": "error",
-		"error": map[string]interface{}{
-			"code":    code,
-			"message": message,
-		},
-		"correlationId": correlationID,
-	}
-	json.NewEncoder(w).Encode(resp)
 }
