@@ -17,7 +17,7 @@ Processing is split into dedicated NSQ topics to prevent long-running tasks from
 - `ingest.result`: Shared topic for results.
 
 ### Reliability & Error Handling
-- **Smart Retries:** Ingestion Worker implements "Smart Retry" for transient errors (Timeout, Connection) with linear backoff (max 3 retries). Permanent errors fail immediately.
+- **Smart Retries:** Ingestion Worker implements "Smart Retry" for transient errors (Timeout, Connection) with configurable exponential backoff (`RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY_MS`, `RETRY_BACKOFF_MULTIPLIER`). Permanent errors fail immediately. Exposed via `.env` and `docker-compose.yml`.
 - **Timeouts:** `CRAWLER_PAGE_TIMEOUT` is configurable (default 60s) to handle slow documentation sites.
 - **Concurrency:** Internal worker concurrency (`WORKER_SEMAPHORE`) is aligned with `NSQ_MAX_IN_FLIGHT` to prevent overload.
 - **Large Payloads:** NSQ server and clients are configured with a 10MB limit (`NSQ_MAX_MSG_SIZE`) to support large PDF markdown generation.
