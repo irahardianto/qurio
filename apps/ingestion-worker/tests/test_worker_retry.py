@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 import asyncio
 import json
 from main import process_message
@@ -25,6 +25,7 @@ async def test_requeue_on_timeout():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -57,6 +58,7 @@ async def test_fail_on_max_retries():
         with (
             patch("main.producer") as mock_producer,
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -90,6 +92,7 @@ async def test_requeue_on_crawl_timeout_ingestion_error():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -130,6 +133,7 @@ async def test_requeue_on_err_crawl_dns():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -160,6 +164,8 @@ async def test_requeue_on_err_crawl_refused():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
+            patch("main.restart_crawler", new_callable=AsyncMock),
         ):
             await process_message(mock_msg)
 
@@ -216,6 +222,7 @@ async def test_permanent_error_no_requeue_err_crawl_blocked():
         with (
             patch("main.producer") as mock_producer,
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -242,6 +249,7 @@ async def test_exponential_backoff_calculation():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             # Attempt 1: delay = 2^0 * 1000 = 1000ms
             mock_msg.attempts = 1
@@ -286,6 +294,7 @@ async def test_max_delay_cap():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -315,6 +324,7 @@ async def test_requeue_failure_handling():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             # Should not raise exception
             await process_message(mock_msg)
@@ -341,6 +351,7 @@ async def test_string_based_timeout_detection():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -370,6 +381,7 @@ async def test_string_based_connection_detection():
         with (
             patch("main.producer"),
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -393,6 +405,7 @@ async def test_retry_with_depth_field():
         with (
             patch("main.producer") as mock_producer,
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 
@@ -418,6 +431,7 @@ async def test_transient_error_with_gemini_api_key():
         with (
             patch("main.producer") as mock_producer,
             patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+            patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()),
         ):
             await process_message(mock_msg)
 

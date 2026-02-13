@@ -3,7 +3,9 @@ from typing import Any
 import asyncio
 import structlog
 import re
+import time as time_mod
 from urllib.parse import urljoin, urlparse
+from handlers.sitemap import fetch_sitemap_urls_with_index
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, LLMConfig
 from crawl4ai.content_filter_strategy import LLMContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
@@ -47,6 +49,38 @@ INSTRUCTION = """
     - Inline code references
     - Numbered lists for sequential steps
 """
+
+# --- LLM Content Filter Circuit Breaker ---
+_llm_consecutive_failures: int = 0
+_llm_circuit_open_until: float = 0.0
+_LLM_CIRCUIT_THRESHOLD = 3
+_LLM_CIRCUIT_COOLDOWN_S = 300.0  # 5 minutes
+
+
+def _is_llm_circuit_open() -> bool:
+    """Check if the LLM circuit breaker is open (too many recent failures)."""
+    return time_mod.monotonic() < _llm_circuit_open_until
+
+
+def _record_llm_failure() -> None:
+    """Record an LLM filter failure; opens circuit after threshold."""
+    global _llm_consecutive_failures, _llm_circuit_open_until
+    _llm_consecutive_failures += 1
+    if _llm_consecutive_failures >= _LLM_CIRCUIT_THRESHOLD:
+        _llm_circuit_open_until = time_mod.monotonic() + _LLM_CIRCUIT_COOLDOWN_S
+        logger.warning(
+            "llm_circuit_opened",
+            operation="handle_web_task",
+            cooldown_s=_LLM_CIRCUIT_COOLDOWN_S,
+            failures=_llm_consecutive_failures,
+        )
+
+
+def _record_llm_success() -> None:
+    """Reset the circuit breaker after a successful LLM filter call."""
+    global _llm_consecutive_failures, _llm_circuit_open_until
+    _llm_consecutive_failures = 0
+    _llm_circuit_open_until = 0.0
 
 
 def _classify_crawl_error(error_message: str) -> IngestionError:
@@ -203,18 +237,31 @@ async def handle_web_task(
     Crawls a single page and returns content and discovered internal links.
     Retries transient crawl errors with exponential backoff before escalating.
     """
-    logger.info("crawl_starting", url=url)
+    logger.info("crawl_starting", operation="handle_web_task", url=url)
+    start = time_mod.monotonic()
 
     # Use passed api_key or fallback to settings
     token = api_key if api_key else app_settings.gemini_api_key
 
-    # Configure Generator (Bypass LLM for .txt/llms.txt)
-    if url.endswith(".txt") or url.endswith("llms.txt"):
+    # Determine if LLM filtering should be used
+    is_text_file = url.endswith(".txt") or url.endswith("llms.txt")
+    use_llm = not is_text_file
+
+    # Configure Generator (Bypass LLM for .txt/llms.txt or when circuit is open)
+    if not use_llm:
         md_generator = DefaultMarkdownGenerator()
-        logger.info("llm_bypass_enabled", url=url, reason="text_file")
+        logger.info(
+            "llm_bypass_enabled",
+            operation="handle_web_task",
+            url=url,
+            reason="text_file",
+        )
+    elif _is_llm_circuit_open():
+        md_generator = DefaultMarkdownGenerator()
+        logger.info("llm_bypass_circuit_open", operation="handle_web_task", url=url)
     else:
         llm_config = LLMConfig(
-            provider="gemini/gemini-3-flash-preview", api_token=token, temperature=1.0
+            provider="gemini/gemini-3-flash-preview", api_token=token, temperature=0.0
         )
 
         llm_filter = LLMContentFilter(
@@ -241,15 +288,57 @@ async def handle_web_task(
                 async with default_crawler_factory(verbose=True) as new_crawler:
                     result = await _crawl_single_page(new_crawler, url, config)
 
-            # Success
+            # Success — update LLM circuit breaker state
+            if use_llm and not _is_llm_circuit_open():
+                md = result.markdown
+                if hasattr(md, "fit_markdown") and (
+                    not md.fit_markdown or not md.fit_markdown.strip()
+                ):
+                    _record_llm_failure()
+                else:
+                    _record_llm_success()
+
             meta = extract_web_metadata(result, url)
 
+            # Sitemap discovery: only for root URLs (seed pages)
+            parsed_url = urlparse(url)
+            is_root = parsed_url.path in ("", "/")
+            if is_root:
+                try:
+                    sitemap_urls = await fetch_sitemap_urls_with_index(url)
+                    if sitemap_urls:
+                        # Merge sitemap URLs into discovered links
+                        existing = set(meta["links"])
+                        new_from_sitemap = [
+                            u for u in sitemap_urls if u not in existing
+                        ]
+                        meta["links"].extend(new_from_sitemap)
+                        logger.info(
+                            "sitemap_urls_merged",
+                            operation="handle_web_task",
+                            url=url,
+                            sitemap_count=len(new_from_sitemap),
+                            total_links=len(meta["links"]),
+                        )
+                except Exception as e:
+                    # Sitemap failure is non-blocking
+                    logger.warning(
+                        "sitemap_discovery_error",
+                        operation="handle_web_task",
+                        url=url,
+                        error=str(e),
+                    )
+
+            content = _get_embedding_content(result)
+            elapsed_ms = (time_mod.monotonic() - start) * 1000
             logger.info(
                 "crawl_completed",
+                operation="handle_web_task",
                 url=url,
                 links_found=len(meta["links"]),
                 title=meta["title"],
-                path=meta["path"],
+                content_length=len(content),
+                duration_ms=round(elapsed_ms, 1),
                 attempt=attempt,
             )
 
@@ -258,8 +347,9 @@ async def handle_web_task(
                     "url": result.url,
                     "title": meta["title"],
                     "path": meta["path"],
-                    "content": _get_embedding_content(result),
+                    "content": content,
                     "links": meta["links"],
+                    "metadata": {},  # Web pages have no doc-level metadata
                 }
             ]
 
@@ -274,6 +364,7 @@ async def handle_web_task(
             if e.code not in TRANSIENT_ERRORS:
                 logger.error(
                     "crawl_permanent_error",
+                    operation="handle_web_task",
                     url=url,
                     error=str(e),
                     code=e.code,
@@ -286,6 +377,7 @@ async def handle_web_task(
             if last_error.code not in TRANSIENT_ERRORS:
                 logger.error(
                     "crawl_permanent_error",
+                    operation="handle_web_task",
                     url=url,
                     error=str(e),
                     attempt=attempt,
@@ -297,6 +389,7 @@ async def handle_web_task(
             delay = CRAWL_INITIAL_BACKOFF_S * (2 ** (attempt - 1))
             logger.warning(
                 "crawl_transient_retry",
+                operation="handle_web_task",
                 url=url,
                 attempt=attempt,
                 next_delay_s=delay,
@@ -305,10 +398,13 @@ async def handle_web_task(
             await asyncio.sleep(delay)
 
     # All retries exhausted
+    elapsed_ms = (time_mod.monotonic() - start) * 1000
     logger.error(
         "crawl_retries_exhausted",
+        operation="handle_web_task",
         url=url,
         attempts=CRAWL_MAX_RETRIES + 1,
         error=str(last_error),
+        duration_ms=round(elapsed_ms, 1),
     )
     raise last_error  # type: ignore[misc]

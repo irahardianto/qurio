@@ -96,12 +96,17 @@ async def test_process_message_missing_id():
 
     with patch("main.producer"):
         with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-            with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-                mock_handle.return_value = []
-                await process_message(mock_msg)
+            with patch(
+                "main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()
+            ):
+                with patch(
+                    "main.handle_web_task", new_callable=AsyncMock
+                ) as mock_handle:
+                    mock_handle.return_value = []
+                    await process_message(mock_msg)
 
-                # Should still finish
-                mock_msg.finish.assert_called()
+                    # Should still finish
+                    mock_msg.finish.assert_called()
 
 
 @pytest.mark.asyncio
@@ -144,23 +149,24 @@ async def test_process_message_web_task_success():
         {"id": "123", "type": "web", "url": "http://example.com"}
     ).encode("utf-8")
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.return_value = [
-            {
-                "content": "test",
-                "url": "http://example.com",
-                "title": "Test",
-                "metadata": {},
-                "links": [],
-            }
-        ]
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.return_value = [
+                {
+                    "content": "test",
+                    "url": "http://example.com",
+                    "title": "Test",
+                    "metadata": {},
+                    "links": [],
+                }
+            ]
 
-        with patch("main.producer") as mock_producer:
-            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                await process_message(mock_msg)
+            with patch("main.producer") as mock_producer:
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    await process_message(mock_msg)
 
-                mock_msg.finish.assert_called()
-                mock_producer.pub.assert_called()
+                    mock_msg.finish.assert_called()
+                    mock_producer.pub.assert_called()
 
 
 @pytest.mark.asyncio
@@ -199,19 +205,20 @@ async def test_process_message_empty_results():
         {"id": "123", "type": "web", "url": "http://example.com"}
     ).encode("utf-8")
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.return_value = []  # Empty results
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.return_value = []  # Empty results
 
-        with patch("main.producer") as mock_producer:
-            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                await process_message(mock_msg)
+            with patch("main.producer") as mock_producer:
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    await process_message(mock_msg)
 
-                # Should publish failure
-                args, kwargs = mock_producer.pub.call_args
-                payload = json.loads(args[1])
-                assert payload["status"] == "failed"
-                assert payload["error"] == "No content extracted"
-                mock_msg.finish.assert_called()
+                    # Should publish failure
+                    args, kwargs = mock_producer.pub.call_args
+                    payload = json.loads(args[1])
+                    assert payload["status"] == "failed"
+                    assert payload["error"] == "No content extracted"
+                    mock_msg.finish.assert_called()
 
 
 @pytest.mark.asyncio
@@ -222,25 +229,26 @@ async def test_process_message_producer_publish_failure():
         {"id": "123", "type": "web", "url": "http://example.com"}
     ).encode("utf-8")
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.return_value = [
-            {
-                "content": "test",
-                "url": "http://example.com",
-                "title": "Test",
-                "metadata": {},
-                "links": [],
-            }
-        ]
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.return_value = [
+                {
+                    "content": "test",
+                    "url": "http://example.com",
+                    "title": "Test",
+                    "metadata": {},
+                    "links": [],
+                }
+            ]
 
-        with patch("main.producer") as mock_producer:
-            mock_producer.pub.side_effect = Exception("Publish failed")
+            with patch("main.producer") as mock_producer:
+                mock_producer.pub.side_effect = Exception("Publish failed")
 
-            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                await process_message(mock_msg)
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    await process_message(mock_msg)
 
-                # Should still finish
-                mock_msg.finish.assert_called()
+                    # Should still finish
+                    mock_msg.finish.assert_called()
 
 
 @pytest.mark.asyncio
@@ -252,21 +260,22 @@ async def test_process_message_finish_failure():
     ).encode("utf-8")
     mock_msg.finish.side_effect = Exception("Finish failed")
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.return_value = [
-            {
-                "content": "test",
-                "url": "http://example.com",
-                "title": "Test",
-                "metadata": {},
-                "links": [],
-            }
-        ]
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.return_value = [
+                {
+                    "content": "test",
+                    "url": "http://example.com",
+                    "title": "Test",
+                    "metadata": {},
+                    "links": [],
+                }
+            ]
 
-        with patch("main.producer"):
-            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                # Should not raise exception
-                await process_message(mock_msg)
+            with patch("main.producer"):
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    # Should not raise exception
+                    await process_message(mock_msg)
 
 
 @pytest.mark.asyncio
@@ -277,16 +286,17 @@ async def test_process_message_cancelled_error():
         {"id": "123", "type": "web", "url": "http://example.com"}
     ).encode("utf-8")
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.side_effect = asyncio.CancelledError()
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.side_effect = asyncio.CancelledError()
 
-        with patch("main.producer"):
-            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                await process_message(mock_msg)
+            with patch("main.producer"):
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    await process_message(mock_msg)
 
-                # Should not finish or requeue
-                mock_msg.finish.assert_not_called()
-                mock_msg.requeue.assert_not_called()
+                    # Should not finish or requeue
+                    mock_msg.finish.assert_not_called()
+                    mock_msg.requeue.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -300,21 +310,22 @@ async def test_process_message_touch_failure():
     ).encode("utf-8")
     mock_msg.touch.side_effect = StreamClosedError()
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.return_value = [
-            {
-                "content": "test",
-                "url": "http://example.com",
-                "title": "Test",
-                "metadata": {},
-                "links": [],
-            }
-        ]
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.return_value = [
+                {
+                    "content": "test",
+                    "url": "http://example.com",
+                    "title": "Test",
+                    "metadata": {},
+                    "links": [],
+                }
+            ]
 
-        with patch("main.producer"):
-            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                # Processing should be cancelled due to touch failure
-                await process_message(mock_msg)
+            with patch("main.producer"):
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    # Processing should be cancelled due to touch failure
+                    await process_message(mock_msg)
 
 
 @pytest.mark.asyncio
@@ -330,22 +341,23 @@ async def test_process_message_includes_original_payload_on_failure():
     }
     mock_msg.body = json.dumps(original_data).encode("utf-8")
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.side_effect = IngestionError(ERR_TIMEOUT, "Timeout")
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.side_effect = IngestionError(ERR_TIMEOUT, "Timeout")
 
-        with patch("main.producer") as mock_producer:
-            with patch("main.settings") as mock_settings:
-                mock_settings.retry_max_attempts = 3
+            with patch("main.producer") as mock_producer:
+                with patch("main.settings") as mock_settings:
+                    mock_settings.retry_max_attempts = 3
 
-                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
-                    await process_message(mock_msg)
+                    with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                        await process_message(mock_msg)
 
-                    # Check that original_payload is included
-                    args, kwargs = mock_producer.pub.call_args
-                    payload = json.loads(args[1])
-                    assert "original_payload" in payload
-                    assert payload["original_payload"] == original_data
-                    mock_msg.finish.assert_called()
+                        # Check that original_payload is included
+                        args, kwargs = mock_producer.pub.call_args
+                        payload = json.loads(args[1])
+                        assert "original_payload" in payload
+                        assert payload["original_payload"] == original_data
+                        mock_msg.finish.assert_called()
 
 
 @pytest.mark.asyncio
@@ -381,15 +393,98 @@ async def test_process_message_concurrent_semaphore():
             }
         ]
 
-    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
-        mock_handle.side_effect = slow_handler
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.side_effect = slow_handler
+
+            with patch("main.producer"):
+                with patch("main.WORKER_SEMAPHORE", semaphore):
+                    # Process both messages concurrently
+                    await asyncio.gather(
+                        process_message(mock_msg1), process_message(mock_msg2)
+                    )
+
+                    # Semaphore should have limited to 1 concurrent
+                    assert max_concurrent == 1
+
+
+# --- New Tests: API Key Redaction, Duration Logging ---
+
+
+@pytest.mark.asyncio
+async def test_process_message_redacts_api_key():
+    """API key should NOT appear in logged payload."""
+
+    mock_msg = MagicMock()
+    mock_msg.body = json.dumps(
+        {
+            "id": "123",
+            "type": "web",
+            "url": "http://example.com",
+            "gemini_api_key": "sk-SECRET-KEY-12345",
+        }
+    ).encode("utf-8")
+
+    with patch("main.get_crawler", new_callable=AsyncMock, return_value=MagicMock()):
+        with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handle:
+            mock_handle.return_value = [
+                {
+                    "content": "test",
+                    "url": "http://example.com",
+                    "title": "Test",
+                    "metadata": {},
+                    "links": [],
+                }
+            ]
+
+            with patch("main.producer"):
+                with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                    with patch("main.logger") as mock_logger:
+                        await process_message(mock_msg)
+
+                        # Find the "message_received" log call
+                        for call_obj in mock_logger.info.call_args_list:
+                            if call_obj.args and call_obj.args[0] == "message_received":
+                                logged_data = call_obj.kwargs.get("data", {})
+                                assert "gemini_api_key" not in logged_data, (
+                                    "API key must be redacted from logged data"
+                                )
+                                break
+
+
+@pytest.mark.asyncio
+async def test_process_message_logs_duration():
+    """Completion log should include duration_ms field."""
+    mock_msg = MagicMock()
+    mock_msg.body = json.dumps(
+        {"id": "123", "type": "file", "path": "/tmp/test.pdf"}
+    ).encode("utf-8")
+
+    with patch("main.handle_file_task", new_callable=AsyncMock) as mock_handle:
+        mock_handle.return_value = [
+            {
+                "content": "test",
+                "url": "/tmp/test.pdf",
+                "path": "/tmp/test.pdf",
+                "title": "Test",
+                "metadata": {},
+                "links": [],
+            }
+        ]
 
         with patch("main.producer"):
-            with patch("main.WORKER_SEMAPHORE", semaphore):
-                # Process both messages concurrently
-                await asyncio.gather(
-                    process_message(mock_msg1), process_message(mock_msg2)
-                )
+            with patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)):
+                with patch("main.logger") as mock_logger:
+                    await process_message(mock_msg)
 
-                # Semaphore should have limited to 1 concurrent
-                assert max_concurrent == 1
+                    # Find "message_processed" log call
+                    found_duration = False
+                    for call_obj in mock_logger.info.call_args_list:
+                        if call_obj.args and call_obj.args[0] == "message_processed":
+                            assert "duration_ms" in call_obj.kwargs, (
+                                "message_processed log must include duration_ms"
+                            )
+                            assert isinstance(call_obj.kwargs["duration_ms"], float)
+                            found_duration = True
+                            break
+                    assert found_duration, "message_processed log event not found"

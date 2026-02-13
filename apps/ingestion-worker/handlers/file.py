@@ -1,6 +1,7 @@
 import asyncio
 import structlog
 import os
+import time as time_mod
 import pebble
 from concurrent.futures import TimeoutError
 # Deferred imports for docling to ensure clean process initialization
@@ -172,13 +173,24 @@ def process_file_sync(file_path: str) -> dict:
         raise e
 
 
-# Use Pebble ProcessPool for robust process management (timeout = kill)
-# Scaled to 8 workers for high-core machines (12 cores / 24 threads)
-# We rely on deferred imports in init_worker to simulate clean state and strict thread limits
-executor = pebble.ProcessPool(max_workers=8, initializer=init_worker)
-
 # Increase timeout to 30 minutes to accommodate large PDF books with OCR
 TIMEOUT_SECONDS = 1800
+
+# Maximum file size: 200MB — prevents OOM in worker processes
+MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
+
+# Lazy-initialized ProcessPool with recovery on crash
+_executor: pebble.ProcessPool | None = None
+
+
+def _get_executor() -> pebble.ProcessPool:
+    """Get or create the Pebble ProcessPool, recreating if the pool is broken."""
+    global _executor
+    if _executor is None or not _executor.active:
+        if _executor is not None:
+            logger.warning("process_pool_recreating", reason="pool_inactive")
+        _executor = pebble.ProcessPool(max_workers=8, initializer=init_worker)
+    return _executor
 
 
 async def handle_file_task(file_path: str) -> list[dict]:
@@ -186,11 +198,36 @@ async def handle_file_task(file_path: str) -> list[dict]:
     Converts a document to markdown using Docling.
     Executes in a Pebble ProcessPool to enforce hard timeouts and kill stuck processes.
     """
-    logger.info("conversion_starting", path=file_path)
+    file_ext = os.path.splitext(file_path)[1].lower()
+
+    # --- Pre-flight validation ---
+    if not os.path.isfile(file_path):
+        raise IngestionError(ERR_INVALID_FORMAT, f"File not found: {file_path}")
+
+    file_size = os.path.getsize(file_path)
+    if file_size == 0:
+        raise IngestionError(ERR_EMPTY, "File is empty (0 bytes)")
+    if file_size > MAX_FILE_SIZE_BYTES:
+        raise IngestionError(
+            ERR_INVALID_FORMAT,
+            f"File too large: {file_size} bytes (limit: {MAX_FILE_SIZE_BYTES})",
+        )
+
+    logger.info(
+        "conversion_starting",
+        operation="handle_file_task",
+        path=file_path,
+        file_size=file_size,
+        file_extension=file_ext,
+    )
+    start = time_mod.monotonic()
 
     try:
+        # Get or recreate the process pool (recovers from crashed workers)
+        pool = _get_executor()
+
         # Schedule the task with a hard timeout managed by Pebble
-        future = executor.schedule(
+        future = pool.schedule(
             process_file_sync, args=[file_path], timeout=TIMEOUT_SECONDS
         )
 
@@ -199,6 +236,15 @@ async def handle_file_task(file_path: str) -> list[dict]:
 
         if not result["content"].strip():
             raise IngestionError(ERR_EMPTY, "File contains no text")
+
+        elapsed_ms = (time_mod.monotonic() - start) * 1000
+        logger.info(
+            "conversion_completed",
+            operation="handle_file_task",
+            path=file_path,
+            duration_ms=round(elapsed_ms, 1),
+            content_length=len(result["content"]),
+        )
 
         return [
             {
@@ -212,20 +258,39 @@ async def handle_file_task(file_path: str) -> list[dict]:
         ]
 
     except (TimeoutError, pebble.ProcessExpired):
-        logger.error("conversion_timeout_killed", path=file_path)
+        elapsed_ms = (time_mod.monotonic() - start) * 1000
+        logger.error(
+            "conversion_timeout_killed",
+            operation="handle_file_task",
+            path=file_path,
+            timeout_seconds=TIMEOUT_SECONDS,
+            duration_ms=round(elapsed_ms, 1),
+        )
         raise IngestionError(
             ERR_TIMEOUT, "Processing timed out and worker process was terminated"
         )
     except IngestionError:
         raise
     except Exception as e:
+        elapsed_ms = (time_mod.monotonic() - start) * 1000
         # Check for wrapped exceptions
         err_msg = str(e).lower()
         if "timeout" in err_msg:
-            logger.error("conversion_timeout_exception", path=file_path)
+            logger.error(
+                "conversion_timeout_exception",
+                operation="handle_file_task",
+                path=file_path,
+                duration_ms=round(elapsed_ms, 1),
+            )
             raise IngestionError(ERR_TIMEOUT, "Processing timed out")
 
-        logger.error("conversion_failed", path=file_path, error=str(e))
+        logger.error(
+            "conversion_failed",
+            operation="handle_file_task",
+            path=file_path,
+            error=str(e),
+            duration_ms=round(elapsed_ms, 1),
+        )
         if "password" in err_msg or "encrypted" in err_msg:
             raise IngestionError(ERR_ENCRYPTED, "File is password protected")
         elif "format" in err_msg:

@@ -1,10 +1,13 @@
 import asyncio
 import json
+import signal
+import time as time_mod
 import nsq
 import uvloop
 import tornado.platform.asyncio
 from tornado.iostream import StreamClosedError
 import structlog
+import structlog.contextvars
 from config import settings
 from handlers.web import handle_web_task
 from handlers.file import handle_file_task
@@ -50,15 +53,51 @@ def _is_transient_error(e: Exception) -> bool:
 
 async def init_crawler():
     global CRAWLER
-    logger.info("initializing_global_crawler")
+    logger.info("initializing_global_crawler", operation="init_crawler")
     try:
         CRAWLER = AsyncWebCrawler(verbose=True)
         await CRAWLER.start()
-        logger.info("global_crawler_started")
+        logger.info("global_crawler_started", operation="init_crawler")
     except Exception as e:
-        logger.error("global_crawler_init_failed", error=str(e))
-        # If crawler fails to start, we should probably exit or retry
+        logger.error(
+            "global_crawler_init_failed", operation="init_crawler", error=str(e)
+        )
         raise
+
+
+async def get_crawler() -> AsyncWebCrawler:
+    """Get the global crawler, initializing if needed."""
+    global CRAWLER
+    if CRAWLER is None:
+        await init_crawler()
+    return CRAWLER  # type: ignore[return-value]
+
+
+async def restart_crawler() -> None:
+    """Restart the global crawler after a detected browser crash."""
+    global CRAWLER
+    logger.warning(
+        "crawler_restarting", operation="restart_crawler", reason="health_check_failed"
+    )
+    if CRAWLER is not None:
+        try:
+            await CRAWLER.close()
+        except Exception as e:
+            logger.debug("restart_crawler_close_failed", error=str(e))
+    CRAWLER = None
+    await init_crawler()
+
+
+_BROWSER_CRASH_KEYWORDS = frozenset(
+    [
+        "browser",
+        "target closed",
+        "session closed",
+        "protocol error",
+        "browser has been closed",
+        "connection refused",
+    ]
+)
 
 
 def handle_message(message):
@@ -98,22 +137,41 @@ async def process_message(message):
 
     try:
         data = json.loads(message.body)
-        logger.info("message_received", data=data)
 
-        source_id = data.get("id")
-        task_type = data.get("type")
+        source_id = data.get("id", "unknown")
+        task_type = data.get("type", "unknown")
+
+        # Bind structured context for all downstream logs (propagates to handlers)
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            correlation_id=source_id,
+            operation="process_message",
+            task_type=task_type,
+        )
+
+        # Redact sensitive fields before logging
+        safe_data = {k: v for k, v in data.items() if k != "gemini_api_key"}
+        logger.info("message_received", data=safe_data)
+
         results_list = []
+        start_time = time_mod.monotonic()
 
         # Enforce global concurrency limit
         async with WORKER_SEMAPHORE:
             if task_type == "web":
                 url = data.get("url")
-                # exclusions = data.get('exclusions', []) # Deprecated/Unused
                 api_key = data.get("gemini_api_key")
-                # Pass the global crawler
-                results_list = await handle_web_task(
-                    url, api_key=api_key, crawler=CRAWLER
-                )
+                try:
+                    crawler = await get_crawler()
+                    results_list = await handle_web_task(
+                        url, api_key=api_key, crawler=crawler
+                    )
+                except Exception as e:
+                    # Detect browser crashes and auto-restart
+                    err_lower = str(e).lower()
+                    if any(kw in err_lower for kw in _BROWSER_CRASH_KEYWORDS):
+                        await restart_crawler()
+                    raise
 
             elif task_type == "file":
                 file_path = data.get("path")
@@ -170,6 +228,13 @@ async def process_message(message):
             message.finish()
         except Exception as e:
             logger.warning("finish_failed", error=str(e))
+
+        elapsed_ms = (time_mod.monotonic() - start_time) * 1000
+        logger.info(
+            "message_processed",
+            duration_ms=round(elapsed_ms, 1),
+            results_count=len(results_list),
+        )
 
     except IngestionError as e:
         logger.error("ingestion_error", error=str(e), code=e.code)
@@ -299,7 +364,7 @@ async def process_message(message):
 
 
 def main():
-    logger.info("worker_starting")
+    logger.info("worker_starting", operation="main")
 
     # Configure uvloop
     uvloop.install()
@@ -309,15 +374,10 @@ def main():
     asyncio.set_event_loop(loop)
 
     # Enable asyncio integration for Tornado
-    # Tornado 6.1+ uses asyncio by default, but pynsq might rely on IOLoop.current()
-    # which needs to be bridged if not fully native yet.
-    # However, newer Tornado versions just wrap asyncio.
-    # AsyncIOMainLoop().install() is technically deprecated but might be needed if pynsq assumes global IOLoop.
     tornado.platform.asyncio.AsyncIOMainLoop().install()
 
     # Create Consumer (Reader)
-    # nsq.Reader connects immediately
-    reader = nsq.Reader(  # noqa: F841 — Reader runs as side-effect of construction
+    reader = nsq.Reader(
         message_handler=handle_message,
         nsqd_tcp_addresses=[settings.nsqd_tcp_address],
         lookupd_http_addresses=[settings.nsq_lookupd_http],
@@ -328,7 +388,6 @@ def main():
     )
 
     # Create Producer (Writer)
-    # nsq.Writer connects to nsqd_tcp_addresses
     global producer
     producer = nsq.Writer([settings.nsqd_tcp_address])
 
@@ -336,10 +395,32 @@ def main():
     global WORKER_SEMAPHORE
     WORKER_SEMAPHORE = asyncio.Semaphore(settings.nsq_max_in_flight)
 
-    logger.info("nsq_initialized", max_in_flight=settings.nsq_max_in_flight)
+    logger.info(
+        "nsq_initialized", operation="main", max_in_flight=settings.nsq_max_in_flight
+    )
 
     # Initialize Global Crawler
     loop.run_until_complete(init_crawler())
+
+    # --- Graceful Shutdown ---
+    def shutdown():
+        logger.info("shutdown_signal_received", operation="main")
+        # Close NSQ connections first to stop receiving new messages
+        try:
+            reader.close()
+        except Exception as e:
+            logger.debug("shutdown_reader_close_failed", error=str(e))
+        try:
+            producer.close()
+        except Exception as e:
+            logger.debug("shutdown_producer_close_failed", error=str(e))
+        # Close the global crawler
+        if CRAWLER is not None:
+            loop.run_until_complete(CRAWLER.close())
+        loop.stop()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, shutdown)
 
     # Run the loop
     loop.run_forever()

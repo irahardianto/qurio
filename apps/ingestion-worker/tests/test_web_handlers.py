@@ -160,7 +160,7 @@ async def test_handle_web_task_auth_precedence():
         MockLLMConfig.assert_called_with(
             provider="gemini/gemini-3-flash-preview",
             api_token="custom-key",
-            temperature=1.0,
+            temperature=0.0,
         )
 
 
@@ -720,3 +720,255 @@ async def test_handle_web_task_link_discovery_uses_raw_markdown():
     links = result[0]["links"]
     assert "http://example.com/guide" in links
     assert "http://example.com/api" in links
+
+
+# --- Sitemap Integration Tests ---
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_root_url_checks_sitemap():
+    """Verify sitemap detection is called for root URLs."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Home Page"
+    mock_result.url = "http://example.com"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch(
+        "handlers.web.fetch_sitemap_urls_with_index",
+        new_callable=AsyncMock,
+        return_value=["http://example.com/from-sitemap"],
+    ) as mock_sitemap:
+        result = await handle_web_task("http://example.com", crawler=mock_crawler)
+
+        mock_sitemap.assert_called_once_with("http://example.com")
+        assert "http://example.com/from-sitemap" in result[0]["links"]
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_root_url_with_slash_checks_sitemap():
+    """Verify sitemap detection is called for root URLs with trailing slash."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Home Page"
+    mock_result.url = "http://example.com/"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch(
+        "handlers.web.fetch_sitemap_urls_with_index",
+        new_callable=AsyncMock,
+        return_value=["http://example.com/docs"],
+    ) as mock_sitemap:
+        result = await handle_web_task("http://example.com/", crawler=mock_crawler)
+
+        mock_sitemap.assert_called_once_with("http://example.com/")
+        assert "http://example.com/docs" in result[0]["links"]
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_non_root_url_skips_sitemap():
+    """Verify sitemap is NOT checked for non-root URLs."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Sub Page"
+    mock_result.url = "http://example.com/docs/api"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch(
+        "handlers.web.fetch_sitemap_urls_with_index",
+        new_callable=AsyncMock,
+    ) as mock_sitemap:
+        await handle_web_task("http://example.com/docs/api", crawler=mock_crawler)
+
+        mock_sitemap.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_sitemap_urls_merged_with_links():
+    """Verify sitemap URLs are merged with crawled links (no duplicates)."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Home"
+    mock_result.url = "http://example.com"
+    mock_result.links = {
+        "internal": [
+            {"href": "http://example.com/about"},
+            {"href": "http://example.com/docs"},
+        ]
+    }
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    sitemap_urls = [
+        "http://example.com/docs",  # Duplicate — already in crawled links
+        "http://example.com/blog",  # New from sitemap
+        "http://example.com/api",  # New from sitemap
+    ]
+
+    with patch(
+        "handlers.web.fetch_sitemap_urls_with_index",
+        new_callable=AsyncMock,
+        return_value=sitemap_urls,
+    ):
+        result = await handle_web_task("http://example.com", crawler=mock_crawler)
+
+    links = result[0]["links"]
+    assert "http://example.com/about" in links
+    assert "http://example.com/docs" in links
+    assert "http://example.com/blog" in links
+    assert "http://example.com/api" in links
+    # No duplicates: docs should appear only once
+    assert links.count("http://example.com/docs") == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_sitemap_failure_non_blocking():
+    """Verify sitemap failure does not break the crawl."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Home"
+    mock_result.url = "http://example.com"
+    mock_result.links = {"internal": [{"href": "http://example.com/about"}]}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch(
+        "handlers.web.fetch_sitemap_urls_with_index",
+        new_callable=AsyncMock,
+        side_effect=Exception("Network error"),
+    ):
+        result = await handle_web_task("http://example.com", crawler=mock_crawler)
+
+    # Should still return crawl results despite sitemap failure
+    assert len(result) == 1
+    assert "http://example.com/about" in result[0]["links"]
+
+
+# --- New Tests: Metadata, Circuit Breaker, Temperature ---
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_returns_metadata_field():
+    """Web result includes 'metadata' key (empty dict for web pages)."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Hello"
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/page", crawler=mock_crawler)
+
+    assert "metadata" in result[0], "Web result must include 'metadata' key"
+    assert result[0]["metadata"] == {}
+
+
+@pytest.mark.asyncio
+async def test_llm_circuit_breaker_opens_after_failures():
+    """Circuit opens after _LLM_CIRCUIT_THRESHOLD consecutive LLM failures."""
+    import handlers.web as web_mod
+    from handlers.web import _record_llm_failure, _is_llm_circuit_open
+
+    # Reset state
+    web_mod._llm_consecutive_failures = 0
+    web_mod._llm_circuit_open_until = 0.0
+
+    # Record failures up to threshold
+    for _ in range(web_mod._LLM_CIRCUIT_THRESHOLD):
+        _record_llm_failure()
+
+    assert _is_llm_circuit_open(), "Circuit should be open after threshold failures"
+
+
+@pytest.mark.asyncio
+async def test_llm_circuit_breaker_resets_on_success():
+    """Circuit resets after a successful LLM call."""
+    import handlers.web as web_mod
+    from handlers.web import (
+        _record_llm_failure,
+        _record_llm_success,
+        _is_llm_circuit_open,
+    )
+
+    # Reset state
+    web_mod._llm_consecutive_failures = 0
+    web_mod._llm_circuit_open_until = 0.0
+
+    # Open the circuit
+    for _ in range(web_mod._LLM_CIRCUIT_THRESHOLD):
+        _record_llm_failure()
+    assert _is_llm_circuit_open()
+
+    # Reset via success
+    _record_llm_success()
+
+    # Consecutive failures should be reset, but circuit_open_until may still be in the future
+    # until it naturally expires. The key assertion: failure count is 0.
+    assert web_mod._llm_consecutive_failures == 0
+    assert web_mod._llm_circuit_open_until == 0.0
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_uses_temperature_zero():
+    """Verify LLM config uses temperature=0.0 (deterministic output)."""
+    from handlers.web import handle_web_task
+    import handlers.web as web_mod
+
+    # Reset circuit breaker
+    web_mod._llm_consecutive_failures = 0
+    web_mod._llm_circuit_open_until = 0.0
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_md = MagicMock()
+    mock_md.fit_markdown = "# Filtered"
+    mock_md.raw_markdown = "# Raw"
+    mock_result.markdown = mock_md
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch("handlers.web.LLMConfig") as mock_llm_config_cls:
+        mock_llm_config_cls.return_value = MagicMock()
+
+        with patch("handlers.web.LLMContentFilter"):
+            await handle_web_task(
+                "http://example.com/page",
+                api_key="test-key",
+                crawler=mock_crawler,
+            )
+
+        # Verify temperature=0.0 was passed
+        mock_llm_config_cls.assert_called_once()
+        call_kwargs = mock_llm_config_cls.call_args
+        assert (
+            call_kwargs.kwargs.get("temperature") == 0.0
+            or call_kwargs[1].get("temperature") == 0.0
+        )
