@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"time"
 
@@ -88,7 +87,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	}
 
 	// Topic pre-creation (Logic from main.go)
-	createTopics(cfg.NSQDHost)
+	createTopics(cfg.NSQDHTTP)
 
 	return &Dependencies{
 		DB:          db,
@@ -97,14 +96,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	}, nil
 }
 
-func createTopics(nsqdHost string) {
-	host, _, _ := net.SplitHostPort(nsqdHost)
-	if host == "" {
-		host = "nsqd"
-	}
-
+func createTopics(nsqdHTTP string) {
 	create := func(topic string) {
-		url := fmt.Sprintf("http://%s:4151/topic/create?topic=%s", host, topic)
+		url := fmt.Sprintf("http://%s/topic/create?topic=%s", nsqdHTTP, topic)
 		resp, err := http.Post(url, "application/json", nil) // #nosec G107 -- URL is built from internal NSQ config, not user input
 		if err != nil {
 			slog.Warn("failed to create NSQ topic", "topic", topic, "error", err)

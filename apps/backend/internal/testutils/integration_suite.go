@@ -165,6 +165,7 @@ func (s *IntegrationSuite) GetAppConfig() *config.Config {
 	// NSQ
 	nHost, _ := s.nsqContainer.Host(ctx)
 	nPort, _ := s.nsqContainer.MappedPort(ctx, "4150")
+	nHTTPPort, _ := s.nsqContainer.MappedPort(ctx, "4151")
 
 	return &config.Config{
 		DBHost:         host,
@@ -175,6 +176,7 @@ func (s *IntegrationSuite) GetAppConfig() *config.Config {
 		WeaviateHost:   fmt.Sprintf("%s:%s", wHost, wPort.Port()),
 		WeaviateScheme: "http",
 		NSQDHost:       fmt.Sprintf("%s:%s", nHost, nPort.Port()),
+		NSQDHTTP:       fmt.Sprintf("%s:%s", nHost, nHTTPPort.Port()),
 	}
 }
 

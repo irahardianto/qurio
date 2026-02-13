@@ -25,6 +25,7 @@ type Config struct {
 	DoclingURL string `envconfig:"DOCLING_URL" default:"http://docling:8000"`
 	NSQLookupd string `envconfig:"NSQ_LOOKUPD" default:"nsqlookupd:4161"`
 	NSQDHost   string `envconfig:"NSQD_HOST" default:"nsqd:4150"`
+	NSQDHTTP   string `envconfig:"NSQD_HTTP" default:"nsqd:4151"`
 
 	EnableAPI            bool   `envconfig:"ENABLE_API" default:"true"`
 	EnableEmbedderWorker bool   `envconfig:"ENABLE_EMBEDDER_WORKER" default:"false"`
