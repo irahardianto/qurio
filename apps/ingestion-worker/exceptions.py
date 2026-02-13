@@ -3,6 +3,7 @@ class IngestionError(Exception):
         self.code = code
         super().__init__(message)
 
+
 # Error Taxonomy
 ERR_ENCRYPTED = "ERR_ENCRYPTED"
 ERR_INVALID_FORMAT = "ERR_INVALID_FORMAT"

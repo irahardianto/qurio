@@ -84,8 +84,8 @@ func (s *IntegrationSuite) Setup() {
 		ExposedPorts: []string{"8080/tcp", "50051/tcp"},
 		Env: map[string]string{
 			"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED": "true",
-			"DEFAULT_VECTORIZER_MODULE":                 "none",
-			"PERSISTENCE_DATA_PATH":                     "/var/lib/weaviate",
+			"DEFAULT_VECTORIZER_MODULE":               "none",
+			"PERSISTENCE_DATA_PATH":                   "/var/lib/weaviate",
 		},
 		WaitingFor: wait.ForHTTP("/v1/meta").WithPort("8080/tcp").WithStartupTimeout(60 * time.Second),
 	}
@@ -135,13 +135,19 @@ func (s *IntegrationSuite) Setup() {
 func (s *IntegrationSuite) Teardown() {
 	ctx := context.Background()
 	if s.pgContainer != nil {
-		s.pgContainer.Terminate(ctx)
+		if err := s.pgContainer.Terminate(ctx); err != nil {
+			slog.Warn("failed to terminate postgres container", "error", err)
+		}
 	}
 	if s.weaviateContainer != nil {
-		s.weaviateContainer.Terminate(ctx)
+		if err := s.weaviateContainer.Terminate(ctx); err != nil {
+			slog.Warn("failed to terminate weaviate container", "error", err)
+		}
 	}
 	if s.nsqContainer != nil {
-		s.nsqContainer.Terminate(ctx)
+		if err := s.nsqContainer.Terminate(ctx); err != nil {
+			slog.Warn("failed to terminate nsq container", "error", err)
+		}
 	}
 }
 

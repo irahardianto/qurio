@@ -8,31 +8,37 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/retrieval"
-	"github.com/stretchr/testify/assert"
 )
 
 // Mocks
 type mockRetriever struct{}
+
 func (m *mockRetriever) Search(ctx context.Context, query string, opts *retrieval.SearchOptions) ([]retrieval.SearchResult, error) {
 	return []retrieval.SearchResult{}, nil
 }
+
 func (m *mockRetriever) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {
 	return []retrieval.SearchResult{}, nil
 }
 
 type mockSourceMgr struct{}
+
 func (m *mockSourceMgr) List(ctx context.Context) ([]source.Source, error) {
 	return []source.Source{}, nil
 }
+
 func (m *mockSourceMgr) GetPages(ctx context.Context, id string) ([]source.SourcePage, error) {
 	return []source.SourcePage{}, nil
 }
 
 func TestServeHTTP_Streaming(t *testing.T) {
 	handler := NewHandler(&mockRetriever{}, &mockSourceMgr{})
-	
+
 	// Single JSON-RPC request
 	reqBody := `{"jsonrpc":"2.0","method":"ping","id":1}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(reqBody))
@@ -50,7 +56,7 @@ func TestServeHTTP_Streaming(t *testing.T) {
 	err := decoder.Decode(&resp1)
 	assert.NoError(t, err)
 	assert.Equal(t, float64(1), resp1.ID)
-	
+
 	// Ensure no second response or garbage
 	var resp2 JSONRPCResponse
 	err = decoder.Decode(&resp2)
@@ -60,14 +66,14 @@ func TestServeHTTP_Streaming(t *testing.T) {
 
 func TestServeHTTP_Error(t *testing.T) {
 	handler := NewHandler(&mockRetriever{}, &mockSourceMgr{})
-	
+
 	// Malformed JSON
 	reqBody := `{"jsonrpc":"2.0", "bad":`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
-	
+
 	// We might get 200 OK with Error body (JSON-RPC) or 200 with error object
 	// Our writeError implementation writes 200 OK with error body
 	assert.Equal(t, http.StatusOK, rec.Code)

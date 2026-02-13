@@ -50,7 +50,7 @@ func TestRetry_Timeout(t *testing.T) {
 	// though not ideal for fast unit tests.
 	// Alternatively, I can't easily mock `time.After` without dependency injection.
 	// I'll proceed with the 6s sleep for correctness verification as per plan "Verify test passes".
-	
+
 	err := service.Retry(context.Background(), "1")
 	if err == nil {
 		t.Fatal("Expected timeout error, got nil")
@@ -113,20 +113,20 @@ func (m *MockJobRepoForTopic) Get(ctx context.Context, id string) (*Job, error) 
 	return &Job{ID: id, Payload: m.Payload}, nil
 }
 func (m *MockJobRepoForTopic) Delete(ctx context.Context, id string) error { return nil }
-func (m *MockJobRepoForTopic) List(ctx context.Context) ([]Job, error) { return nil, nil }
-func (m *MockJobRepoForTopic) Count(ctx context.Context) (int, error) { return 0, nil }
-func (m *MockJobRepoForTopic) Save(ctx context.Context, job *Job) error { return nil }
+func (m *MockJobRepoForTopic) List(ctx context.Context) ([]Job, error)     { return nil, nil }
+func (m *MockJobRepoForTopic) Count(ctx context.Context) (int, error)      { return 0, nil }
+func (m *MockJobRepoForTopic) Save(ctx context.Context, job *Job) error    { return nil }
 
 func TestRetry_TopicSelection(t *testing.T) {
 	pub := &MockPublisher{}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	
+
 	// We need to inject the specific repo behavior.
 	// Since NewService takes Repository interface, we can pass our custom mock.
 	customRepo := &MockJobRepoForTopic{
 		Payload: []byte(`{"type": "file", "path": "/tmp/test.pdf"}`),
 	}
-	
+
 	service := NewService(customRepo, pub, logger)
 
 	err := service.Retry(context.Background(), "1")

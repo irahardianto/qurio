@@ -3,8 +3,10 @@ package config_test
 import (
 	"os"
 	"testing"
-	"qurio/apps/backend/internal/config"
+
 	"github.com/stretchr/testify/assert"
+
+	"qurio/apps/backend/internal/config"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -20,7 +22,7 @@ func TestLoadConfig(t *testing.T) {
 func TestLoadConfig_FromEnvFile(t *testing.T) {
 	// Create a temp .env file
 	content := []byte("DB_HOST=loaded-from-file")
-	err := os.WriteFile(".env", content, 0644)
+	err := os.WriteFile(".env", content, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}

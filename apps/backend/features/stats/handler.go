@@ -42,7 +42,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	correlationID := middleware.GetCorrelationID(ctx)
 
 	slog.InfoContext(ctx, "getting stats", "correlationId", correlationID)
-	
+
 	sCount, err := h.sourceRepo.Count(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to count sources", "error", err, "correlationId", correlationID)
@@ -71,7 +71,9 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": resp})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"data": resp}); err != nil {
+		slog.ErrorContext(ctx, "failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
@@ -86,5 +88,7 @@ func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, m
 		"correlationId": middleware.GetCorrelationID(ctx),
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("failed to encode error response", "error", err)
+	}
 }

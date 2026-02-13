@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"qurio/apps/backend/internal/app"
 	"qurio/apps/backend/internal/config"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestEnsureSchemaWithRetry_Success(t *testing.T) {

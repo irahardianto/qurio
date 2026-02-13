@@ -63,7 +63,7 @@ func TestSourceRepo_Integration(t *testing.T) {
 
 	// Verify it's gone from standard Get/List
 	_, err = repo.Get(ctx, src.ID)
-	assert.Error(t, err) 
+	assert.Error(t, err)
 
 	listAfterDelete, err := repo.List(ctx)
 	require.NoError(t, err)
@@ -149,7 +149,9 @@ func TestRepo_UniqueIndex_SoftDelete(t *testing.T) {
 }
 
 func TestRepo_ResetStuckPages_Effectiveness(t *testing.T) {
-	if testing.Short() { t.Skip() }
+	if testing.Short() {
+		t.Skip()
+	}
 	s := testutils.NewIntegrationSuite(t)
 	s.Setup()
 	defer s.Teardown()
@@ -182,7 +184,9 @@ func TestRepo_ResetStuckPages_Effectiveness(t *testing.T) {
 }
 
 func TestRepo_DeletePages(t *testing.T) {
-	if testing.Short() { t.Skip() }
+	if testing.Short() {
+		t.Skip()
+	}
 	s := testutils.NewIntegrationSuite(t)
 	s.Setup()
 	defer s.Teardown()
@@ -207,7 +211,9 @@ func TestRepo_DeletePages(t *testing.T) {
 }
 
 func TestRepo_Concurrent_Page_Creation(t *testing.T) {
-	if testing.Short() { t.Skip() }
+	if testing.Short() {
+		t.Skip()
+	}
 	s := testutils.NewIntegrationSuite(t)
 	s.Setup()
 	defer s.Teardown()

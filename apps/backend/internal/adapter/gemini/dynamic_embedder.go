@@ -3,10 +3,12 @@ package gemini
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
+
 	"qurio/apps/backend/internal/settings"
 )
 
@@ -70,7 +72,9 @@ func (e *DynamicEmbedder) getClient(ctx context.Context, key string) (*genai.Cli
 	}
 
 	if e.client != nil {
-		e.client.Close()
+		if err := e.client.Close(); err != nil {
+			slog.Warn("failed to close previous genai client", "error", err)
+		}
 	}
 
 	opts := append(e.clientOpts, option.WithAPIKey(key))

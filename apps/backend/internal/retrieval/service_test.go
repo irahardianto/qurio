@@ -29,6 +29,7 @@ func (m *MockStore) Search(ctx context.Context, query string, vector []float32, 
 	}
 	return args.Get(0).([]retrieval.SearchResult), args.Error(1)
 }
+
 func (m *MockStore) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {
 	args := m.Called(ctx, url)
 	return args.Get(0).([]retrieval.SearchResult), args.Error(1)
@@ -40,6 +41,7 @@ func (m *MockSettingsRepo) Get(ctx context.Context) (*settings.Settings, error) 
 	args := m.Called(ctx)
 	return args.Get(0).(*settings.Settings), args.Error(1)
 }
+
 func (m *MockSettingsRepo) Update(ctx context.Context, s *settings.Settings) error {
 	args := m.Called(ctx, s)
 	return args.Error(0)
@@ -57,12 +59,12 @@ func (m *MockReranker) Rerank(ctx context.Context, query string, docs []string) 
 
 func TestService_Search(t *testing.T) {
 	tests := []struct {
-		name    string
-		query   string
-		opts    *retrieval.SearchOptions
-		setup   func(*MockEmbedder, *MockStore, *MockReranker, *MockSettingsRepo)
-		wantLen int
-		wantErr bool
+		name        string
+		query       string
+		opts        *retrieval.SearchOptions
+		setup       func(*MockEmbedder, *MockStore, *MockReranker, *MockSettingsRepo)
+		wantLen     int
+		wantErr     bool
 		check       func(*testing.T, []retrieval.SearchResult)
 		nilReranker bool
 	}{
@@ -157,8 +159,8 @@ func TestService_Search(t *testing.T) {
 			wantLen: 0,
 		},
 		{
-			name:  "Metadata Population",
-			query: "test",
+			name:        "Metadata Population",
+			query:       "test",
 			nilReranker: true,
 			setup: func(e *MockEmbedder, s *MockStore, r *MockReranker, set *MockSettingsRepo) {
 				set.On("Get", mock.Anything).Return(&settings.Settings{SearchAlpha: 0.5, SearchTopK: 10}, nil)
@@ -245,7 +247,7 @@ func TestService_Search_RerankerEdgeCases(t *testing.T) {
 		e.On("Embed", mock.Anything, "test").Return([]float32{0.1}, nil)
 		s.On("Search", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return([]retrieval.SearchResult{{Content: "A"}, {Content: "B"}}, nil)
-		
+
 		// Reranker returns index 5 which is out of bounds (len 2)
 		r.On("Rerank", mock.Anything, "test", []string{"A", "B"}).Return([]int{5, 0}, nil)
 
@@ -253,7 +255,7 @@ func TestService_Search_RerankerEdgeCases(t *testing.T) {
 		res, err := svc.Search(context.Background(), "test", nil)
 
 		assert.NoError(t, err)
-		assert.Len(t, res, 2) // Should return 2? 
+		assert.Len(t, res, 2) // Should return 2?
 		// Logic:
 		// reranked := make([]SearchResult, len(indices))
 		// for i, idx := range indices {
@@ -263,11 +265,11 @@ func TestService_Search_RerankerEdgeCases(t *testing.T) {
 		// Wait, make creates zero-valued structs. So index 0 will be empty SearchResult.
 		// Is this desired behavior? Probably not, but it's safe from panic.
 		// Let's verify that's what happens.
-		
-		assert.Equal(t, "", res[0].Content) // Empty struct
+
+		assert.Equal(t, "", res[0].Content)  // Empty struct
 		assert.Equal(t, "A", res[1].Content) // Index 0 of docs maps to index 1 of indices
 	})
-	
+
 	t.Run("Empty Docs - Reranker Skipped", func(t *testing.T) {
 		e := new(MockEmbedder)
 		s := new(MockStore)

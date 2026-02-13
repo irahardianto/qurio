@@ -40,6 +40,7 @@ func (m *SpyRetriever) Search(ctx context.Context, query string, opts *retrieval
 	m.LastCtx = ctx
 	return []retrieval.SearchResult{}, nil
 }
+
 func (m *SpyRetriever) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {
 	m.LastCtx = ctx
 	return []retrieval.SearchResult{}, nil
@@ -103,7 +104,7 @@ func TestMCPHandler_Integration(t *testing.T) {
 		Query: "fox",
 	}
 	argsBytes, _ := json.Marshal(searchArgs)
-	
+
 	callParams := mcp.CallParams{
 		Name:      "qurio_search",
 		Arguments: argsBytes,
@@ -130,17 +131,17 @@ func TestMCPHandler_Integration(t *testing.T) {
 	err = json.Unmarshal(rr.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.Nil(t, resp.Error)
-	
+
 	resultMap, ok := resp.Result.(map[string]interface{})
 	require.True(t, ok)
-	
+
 	contentList, ok := resultMap["content"].([]interface{})
 	require.True(t, ok)
 	require.NotEmpty(t, contentList)
-	
+
 	firstContent := contentList[0].(map[string]interface{})
 	text := firstContent["text"].(string)
-	
+
 	assert.Contains(t, text, "Fox Page")
 	assert.Contains(t, text, "The quick brown fox")
 }
@@ -150,7 +151,7 @@ func TestIntegration_Streaming_Correlation(t *testing.T) {
 	handler := mcp.NewHandler(spyRetriever, nil) // sourceMgr nil as we won't call it
 
 	correlationID := "test-correlation-id-streaming"
-	
+
 	// Prepare a request that calls Search, so we can verify context on the spy
 	searchArgs := mcp.SearchArgs{Query: "test"}
 	argsBytes, _ := json.Marshal(searchArgs)
@@ -166,7 +167,7 @@ func TestIntegration_Streaming_Correlation(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(string(bodyBytes)))
 	req.Header.Set("X-Correlation-ID", correlationID)
-	
+
 	rec := httptest.NewRecorder()
 
 	// Wrap with middleware
@@ -175,7 +176,7 @@ func TestIntegration_Streaming_Correlation(t *testing.T) {
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
-	
+
 	// Verify Context
 	require.NotNil(t, spyRetriever.LastCtx, "Retriever should have been called")
 	gotID := middleware.GetCorrelationID(spyRetriever.LastCtx)

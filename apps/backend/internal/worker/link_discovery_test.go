@@ -105,7 +105,7 @@ func TestDiscoverLinks_Comprehensive(t *testing.T) {
 			args: args{
 				sourceID: "src1",
 				host:     "example.com",
-				links:    []string{
+				links: []string{
 					"mailto:user@example.com",
 					"tel:1234567890",
 					"javascript:alert(1)",

@@ -95,17 +95,17 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 	if text == "" {
 		return nil
 	}
-	
+
 	// Approx chars per token
 	maxChars := maxTokens * 4
-	
+
 	// 1. Split by Headers (level 1-6)
 	headerRe := regexp.MustCompile(`(?m)^#{1,6}\s`)
 	headerIndices := headerRe.FindAllStringIndex(text, -1)
-	
+
 	var sections []string
 	lastIdx := 0
-	
+
 	for _, loc := range headerIndices {
 		if loc[0] > lastIdx {
 			sections = append(sections, text[lastIdx:loc[0]])
@@ -115,32 +115,32 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 	if lastIdx < len(text) {
 		sections = append(sections, text[lastIdx:])
 	}
-	
+
 	var chunks []ChunkResult
-	
+
 	for _, section := range sections {
 		section = strings.TrimSpace(section)
 		if len(section) == 0 {
 			continue
 		}
-		
+
 		if len(section) <= maxChars {
 			chunks = append(chunks, ChunkResult{Content: section, Type: detectChunkType(section)})
 			continue
 		}
-		
+
 		// 2. Split by Paragraphs
 		paragraphs := strings.Split(section, "\n\n")
 		var currentChunk strings.Builder
-		
+
 		for _, para := range paragraphs {
 			para = strings.TrimSpace(para)
 			if len(para) == 0 {
 				continue
 			}
-		
+
 			// If paragraph fits in current chunk
-			if currentChunk.Len() + len(para) + 2 <= maxChars {
+			if currentChunk.Len()+len(para)+2 <= maxChars {
 				if currentChunk.Len() > 0 {
 					currentChunk.WriteString("\n\n")
 				}
@@ -151,13 +151,13 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 					chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 					currentChunk.Reset()
 				}
-				
+
 				// Handle large paragraph
 				if len(para) > maxChars {
 					// 3. Split by Lines
 					lines := strings.Split(para, "\n")
 					for _, line := range lines {
-						if currentChunk.Len() + len(line) + 1 <= maxChars {
+						if currentChunk.Len()+len(line)+1 <= maxChars {
 							if currentChunk.Len() > 0 {
 								currentChunk.WriteString("\n")
 							}
@@ -167,12 +167,12 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 								chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 								currentChunk.Reset()
 							}
-							
+
 							// 4. Split by Words (Fallback)
 							if len(line) > maxChars {
 								words := strings.Fields(line)
 								for _, word := range words {
-									if currentChunk.Len() + len(word) + 1 <= maxChars {
+									if currentChunk.Len()+len(word)+1 <= maxChars {
 										if currentChunk.Len() > 0 {
 											currentChunk.WriteString(" ")
 										}
@@ -193,12 +193,12 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 				}
 			}
 		}
-		
+
 		if currentChunk.Len() > 0 {
 			chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 		}
 	}
-	
+
 	return chunks
 }
 
@@ -206,17 +206,17 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 func chunkCode(content, lang string, cType ChunkType, maxTokens int) []ChunkResult {
 	lines := strings.Split(content, "\n")
 	var chunks []ChunkResult
-	
+
 	charsPerToken := 4
 	maxChars := maxTokens * charsPerToken
-	
+
 	var currentChunk strings.Builder
 	currentLen := 0
-	
+
 	for _, line := range lines {
-		lineLen := len(line) + 1 
-		
-		if currentLen + lineLen > maxChars && currentLen > 0 {
+		lineLen := len(line) + 1
+
+		if currentLen+lineLen > maxChars && currentLen > 0 {
 			chunks = append(chunks, ChunkResult{
 				Content:  "```" + lang + "\n" + currentChunk.String() + "\n```",
 				Type:     cType,
@@ -225,12 +225,12 @@ func chunkCode(content, lang string, cType ChunkType, maxTokens int) []ChunkResu
 			currentChunk.Reset()
 			currentLen = 0
 		}
-		
+
 		currentChunk.WriteString(line)
 		currentChunk.WriteString("\n")
 		currentLen += lineLen
 	}
-	
+
 	if currentLen > 0 {
 		chunks = append(chunks, ChunkResult{
 			Content:  "```" + lang + "\n" + currentChunk.String() + "\n```",
@@ -238,7 +238,7 @@ func chunkCode(content, lang string, cType ChunkType, maxTokens int) []ChunkResu
 			Language: lang,
 		})
 	}
-	
+
 	return chunks
 }
 

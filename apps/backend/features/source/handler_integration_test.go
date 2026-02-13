@@ -68,7 +68,7 @@ func TestHandler_Upload_Integration(t *testing.T) {
 	savedPath := data["url"].(string)
 	assert.Contains(t, savedPath, tmpDir)
 	assert.FileExists(t, savedPath)
-	
+
 	content, err := os.ReadFile(savedPath)
 	require.NoError(t, err)
 	assert.Equal(t, "dummy pdf content", string(content))

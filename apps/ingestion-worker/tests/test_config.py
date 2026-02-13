@@ -1,6 +1,7 @@
 import os
 from config import Settings
 
+
 def test_topic_override():
     os.environ["NSQ_TOPIC_INGEST"] = "ingest.test.topic"
     settings = Settings()

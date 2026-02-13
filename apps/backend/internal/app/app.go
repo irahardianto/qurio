@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/features/mcp"
@@ -40,7 +41,6 @@ func New(
 	logger *slog.Logger,
 	opts *Options,
 ) (*App, error) {
-	
 	// 5. Initialize Adapters & Services
 	// vecStore is passed as interface
 
@@ -52,7 +52,7 @@ func New(
 
 	settingsRepo := settings.NewPostgresRepo(sqlDB)
 	settingsService := settings.NewService(settingsRepo)
-	
+
 	// Seed Gemini API Key from Config
 	if cfg.GeminiAPIKey != "" {
 		ctx := context.Background()
@@ -138,7 +138,7 @@ func New(
 
 	// Routes
 	mux := http.NewServeMux()
-	
+
 	mux.Handle("POST /sources", middleware.CorrelationID(enableCORS(sourceHandler.Create)))
 	mux.Handle("POST /sources/upload", middleware.CorrelationID(enableCORS(sourceHandler.Upload)))
 	mux.Handle("GET /sources", middleware.CorrelationID(enableCORS(sourceHandler.List)))
@@ -164,20 +164,22 @@ func New(
 
 	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, settingsService, queryLogger)
 	mcpHandler := mcp.NewHandler(retrievalService, sourceService)
-	
+
 	// Unified Endpoint (Streaming)
 	mux.Handle("/mcp", middleware.CorrelationID(enableCORS(mcpHandler.ServeHTTP)))
-	
+
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			slog.Error("failed to write health response", "error", err)
+		}
 	})
 
 	// Worker (Result Consumer) Setup
 	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo, settings: settingsService}
 	pmAdapter := &pageManagerAdapter{repo: sourceRepo}
-	
+
 	resultConsumer := worker.NewResultConsumer(vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, taskPub)
 
 	var embedderConsumer *worker.EmbedderConsumer
@@ -195,8 +197,9 @@ func New(
 
 func (a *App) Run(ctx context.Context) error {
 	srv := &http.Server{
-		Addr:    ":8081",
-		Handler: a.Handler,
+		Addr:              ":8081",
+		Handler:           a.Handler,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
@@ -233,13 +236,13 @@ func (a *sourceFetcherAdapter) GetSourceConfig(ctx context.Context, id string) (
 	if err != nil {
 		return 0, nil, "", "", err
 	}
-	
+
 	set, err := a.settings.Get(ctx)
 	apiKey := ""
 	if err == nil && set != nil {
 		apiKey = set.GeminiAPIKey
 	}
-	
+
 	return s.MaxDepth, s.Exclusions, apiKey, s.Name, nil
 }
 
@@ -269,4 +272,3 @@ func (a *pageManagerAdapter) UpdatePageStatus(ctx context.Context, sourceID, url
 func (a *pageManagerAdapter) CountPendingPages(ctx context.Context, sourceID string) (int, error) {
 	return a.repo.CountPendingPages(ctx, sourceID)
 }
-

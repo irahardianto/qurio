@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"qurio/apps/backend/internal/retrieval"
-	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/vector"
+	"strconv"
+
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/filters"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
+
+	"qurio/apps/backend/internal/retrieval"
+	"qurio/apps/backend/internal/vector"
+	"qurio/apps/backend/internal/worker"
 )
 
 type Store struct {
@@ -33,7 +36,7 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 		"sourceId":   chunk.SourceID,
 		"chunkIndex": chunk.ChunkIndex,
 	}
-	
+
 	if chunk.Type != "" {
 		properties["type"] = chunk.Type
 	}
@@ -137,7 +140,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 					WithValueString(sVal))
 			}
 		}
-		
+
 		if len(operands) > 0 {
 			where := filters.Where().
 				WithOperator(filters.And).
@@ -151,7 +154,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 		slog.ErrorContext(ctx, "search failed", "error", err)
 		return nil, err
 	}
-	
+
 	if len(res.Errors) > 0 {
 		msg := ""
 		for _, e := range res.Errors {
@@ -168,7 +171,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 					result := retrieval.SearchResult{
 						Metadata: make(map[string]interface{}),
 					}
-					
+
 					if content, ok := props["content"].(string); ok {
 						result.Content = content
 					}
@@ -211,13 +214,13 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 						result.PageCount = int(pageCount)
 						result.Metadata["pageCount"] = int(pageCount)
 					}
-					
+
 					// Extract score
 					if additional, ok := props["_additional"].(map[string]interface{}); ok {
 						if score, ok := additional["score"].(string); ok {
-							var fScore float64
-							fmt.Sscanf(score, "%f", &fScore)
-							result.Score = float32(fScore)
+							if fScore, err := strconv.ParseFloat(score, 64); err == nil {
+								result.Score = float32(fScore)
+							}
 						} else if score, ok := additional["score"].(float64); ok {
 							result.Score = float32(score)
 						}
@@ -256,7 +259,6 @@ func (s *Store) GetChunks(ctx context.Context, sourceID string, limit, offset in
 		WithOffset(offset).
 		WithFields(fields...).
 		Do(ctx)
-	
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +335,6 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 		WithSort(graphql.Sort{Path: []string{"chunkIndex"}, Order: graphql.Asc}).
 		WithFields(fields...).
 		Do(ctx)
-	
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +420,7 @@ func (s *Store) CountChunks(ctx context.Context) (int, error) {
 	if len(meta.Errors) > 0 {
 		return 0, fmt.Errorf("graphql error: %v", meta.Errors)
 	}
-	
+
 	if data, ok := meta.Data["Aggregate"].(map[string]interface{}); ok {
 		if chunks, ok := data["DocumentChunk"].([]interface{}); ok {
 			if len(chunks) > 0 {
@@ -458,7 +459,7 @@ func (s *Store) CountChunksBySource(ctx context.Context, sourceID string) (int, 
 	if len(meta.Errors) > 0 {
 		return 0, fmt.Errorf("graphql error: %v", meta.Errors)
 	}
-	
+
 	if data, ok := meta.Data["Aggregate"].(map[string]interface{}); ok {
 		if chunks, ok := data["DocumentChunk"].([]interface{}); ok {
 			if len(chunks) > 0 {

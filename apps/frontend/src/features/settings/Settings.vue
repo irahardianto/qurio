@@ -1,42 +1,41 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useSettingsStore } from './settings.store'
-import { Save, Loader2, HelpCircle } from 'lucide-vue-next'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { onMounted } from "vue";
+import { useSettingsStore } from "./settings.store";
+import { Save, Loader2, HelpCircle } from "lucide-vue-next";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip'
+} from "@/components/ui/tooltip";
 
-
-const store = useSettingsStore()
+const store = useSettingsStore();
 
 const handleUpdateSettings = async () => {
   try {
-    await store.updateSettings()
+    await store.updateSettings();
   } catch (error) {
     // Error is handled in store state usually, but catching here prevents unhandled rejection
-    console.error('Update failed', error)
+    console.error("Update failed", error);
   }
-}
+};
 
 onMounted(async () => {
   try {
-    await store.fetchSettings()
+    await store.fetchSettings();
   } catch (error) {
-    console.error('Fetch failed', error)
+    console.error("Fetch failed", error);
   }
-})
+});
 </script>
 
 <template>
@@ -56,14 +55,21 @@ onMounted(async () => {
 
     <div class="space-y-2">
       <div class="flex items-center gap-2">
-        <label for="geminiKey" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Gemini API Key</label>
+        <label
+          for="geminiKey"
+          class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+        >Gemini API Key</label>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger as-child>
-              <HelpCircle class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
+              <HelpCircle
+                class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors"
+              />
             </TooltipTrigger>
             <TooltipContent>
-              <p class="max-w-xs">The key can be updated dynamically without restarting.</p>
+              <p class="max-w-xs">
+                The key can be updated dynamically without restarting.
+              </p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -83,30 +89,41 @@ onMounted(async () => {
     <div class="space-y-4">
       <div class="space-y-2">
         <div class="flex items-center gap-2">
-           <label for="searchAlpha" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-            Search Balance: <span class="font-mono text-primary">{{ store.searchAlpha }}</span>
+          <label
+            for="searchAlpha"
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Search Balance:
+            <span class="font-mono text-primary">{{ store.searchAlpha }}</span>
           </label>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger as-child>
-                <HelpCircle class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
+                <HelpCircle
+                  class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors"
+                />
               </TooltipTrigger>
               <TooltipContent>
-                <p class="max-w-xs">Adjusts importance of Keyword vs Vector search.<br>0.0 = Exact Match<br>1.0 = Conceptual Match</p>
+                <p class="max-w-xs">
+                  Adjusts importance of Keyword vs Vector search.<br>0.0 =
+                  Exact Match<br>1.0 = Conceptual Match
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
-        <input 
-          id="searchAlpha" 
-          v-model.number="store.searchAlpha" 
-          type="range" 
-          min="0" 
-          max="1" 
+        <input
+          id="searchAlpha"
+          v-model.number="store.searchAlpha"
+          type="range"
+          min="0"
+          max="1"
           step="0.1"
           class="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
         >
-        <div class="flex justify-between text-xs text-muted-foreground font-mono">
+        <div
+          class="flex justify-between text-xs text-muted-foreground font-mono"
+        >
           <span>Exact (0.0)</span>
           <span>Conceptual (1.0)</span>
         </div>
@@ -114,11 +131,16 @@ onMounted(async () => {
 
       <div class="space-y-2">
         <div class="flex items-center gap-2">
-          <label for="searchTopK" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Max Results</label>
-           <TooltipProvider>
+          <label
+            for="searchTopK"
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >Max Results</label>
+          <TooltipProvider>
             <Tooltip>
               <TooltipTrigger as-child>
-                <HelpCircle class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
+                <HelpCircle
+                  class="h-4 w-4 text-muted-foreground cursor-help hover:text-foreground transition-colors"
+                />
               </TooltipTrigger>
               <TooltipContent>
                 <p>Maximum number of document chunks to retrieve per search.</p>
@@ -136,19 +158,29 @@ onMounted(async () => {
     </div>
 
     <div class="space-y-2">
-      <label for="provider" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Rerank Provider</label>
+      <label
+        for="provider"
+        class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+      >Rerank Provider</label>
       <Select v-model="store.rerankProvider">
         <SelectTrigger class="w-full">
           <SelectValue placeholder="Select a provider" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="none">None</SelectItem>
-          <SelectItem value="jina">Jina AI</SelectItem>
-          <SelectItem value="cohere">Cohere</SelectItem>
+          <SelectItem value="none">
+            None
+          </SelectItem>
+          <SelectItem value="jina">
+            Jina AI
+          </SelectItem>
+          <SelectItem value="cohere">
+            Cohere
+          </SelectItem>
         </SelectContent>
       </Select>
       <p class="text-[0.8rem] text-muted-foreground">
-        Select an external provider to re-rank search results for better accuracy.
+        Select an external provider to re-rank search results for better
+        accuracy.
       </p>
     </div>
 
@@ -156,7 +188,10 @@ onMounted(async () => {
       v-if="store.rerankProvider !== 'none'"
       class="space-y-2 animate-in slide-in-from-top-2 fade-in duration-200"
     >
-      <label for="apiKey" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Rerank API Key</label>
+      <label
+        for="apiKey"
+        class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+      >Rerank API Key</label>
       <Input
         id="apiKey"
         v-model="store.rerankApiKey"
@@ -166,10 +201,10 @@ onMounted(async () => {
       />
     </div>
 
-    <Button 
-      :disabled="store.isLoading" 
-      @click="handleUpdateSettings"
+    <Button
+      :disabled="store.isLoading"
       class="w-full sm:w-auto"
+      @click="handleUpdateSettings"
     >
       <Loader2
         v-if="store.isLoading"
@@ -179,7 +214,7 @@ onMounted(async () => {
         v-else
         class="mr-2 h-4 w-4"
       />
-      <span>{{ store.isLoading ? 'Saving...' : 'Save Configuration' }}</span>
+      <span>{{ store.isLoading ? "Saving..." : "Save Configuration" }}</span>
     </Button>
   </div>
 </template>

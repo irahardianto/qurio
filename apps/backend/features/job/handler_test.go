@@ -23,6 +23,7 @@ func (m *MockRepo) Save(ctx context.Context, j *job.Job) error {
 	args := m.Called(ctx, j)
 	return args.Error(0)
 }
+
 func (m *MockRepo) List(ctx context.Context) ([]job.Job, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
@@ -30,6 +31,7 @@ func (m *MockRepo) List(ctx context.Context) ([]job.Job, error) {
 	}
 	return args.Get(0).([]job.Job), args.Error(1)
 }
+
 func (m *MockRepo) Get(ctx context.Context, id string) (*job.Job, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
@@ -37,10 +39,12 @@ func (m *MockRepo) Get(ctx context.Context, id string) (*job.Job, error) {
 	}
 	return args.Get(0).(*job.Job), args.Error(1)
 }
+
 func (m *MockRepo) Delete(ctx context.Context, id string) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+
 func (m *MockRepo) Count(ctx context.Context) (int, error) {
 	args := m.Called(ctx)
 	return args.Int(0), args.Error(1)

@@ -184,9 +184,9 @@ func (r *PostgresRepo) ResetStuckPages(ctx context.Context, timeout time.Duratio
 	query := `UPDATE source_pages 
               SET status = 'pending', updated_at = NOW(), error = 'timeout_reset' 
               WHERE status = 'processing' AND updated_at < $1`
-	
+
 	cutoff := time.Now().Add(-timeout)
-	
+
 	result, err := r.db.ExecContext(ctx, query, cutoff)
 	if err != nil {
 		return 0, err

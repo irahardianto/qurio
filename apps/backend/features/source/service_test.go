@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/config"
 )
 
 // --- Mocks ---
@@ -150,7 +150,7 @@ func TestService_Create_Success(t *testing.T) {
 
 	// 1. Check duplicate
 	mockRepo.On("ExistsByHash", mock.Anything, mock.AnythingOfType("string")).Return(false, nil)
-	
+
 	// 2. Save
 	mockRepo.On("Save", mock.Anything, mock.MatchedBy(func(s *Source) bool {
 		return s.Status == "in_progress" && s.Type == "web"

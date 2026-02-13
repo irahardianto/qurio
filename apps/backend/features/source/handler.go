@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -68,7 +69,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": src})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"data": src}); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -109,20 +112,20 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if uploadDir == "" {
 		uploadDir = "./uploads"
 	}
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		slog.Error("failed to create upload directory", "error", err, "path", uploadDir)
+	if err := os.MkdirAll(uploadDir, 0o750); err != nil { // #nosec G703 -- uploadDir from env or hardcoded default, not user-controlled
+		slog.Error("failed to create upload directory", "error", err, "path", filepath.Clean(uploadDir))
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to create upload directory", http.StatusInternalServerError)
 		return
 	}
 
 	// Generate filename
 	filename := fmt.Sprintf("%s_%s", uuid.New().String(), filepath.Base(header.Filename))
-	path := filepath.Join(uploadDir, filename)
+	path := filepath.Clean(filepath.Join(uploadDir, filename))
 
 	// Create file
-	dst, err := os.Create(path)
+	dst, err := os.Create(path) // #nosec G304 G703 -- path is constructed from UUID + sanitized basename, not user-controlled
 	if err != nil {
-		slog.Error("failed to create file", "error", err, "path", path)
+		slog.Error("failed to create file", "error", err, "path", path) // #nosec G706 -- path is UUID-based, not raw user input
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to save file", http.StatusInternalServerError)
 		return
 	}
@@ -143,7 +146,9 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	src, err := h.service.Upload(r.Context(), path, fileHash, name)
 	if err != nil {
 		// Clean up file if duplicate or error
-		os.Remove(path)
+		if removeErr := os.Remove(path); removeErr != nil { // #nosec G703 -- path is UUID-based, not raw user input
+			slog.Warn("failed to clean up uploaded file", "error", removeErr, "path", filepath.Clean(path))
+		}
 
 		if err.Error() == "Duplicate detected" {
 			h.writeError(r.Context(), w, "CONFLICT", err.Error(), http.StatusConflict)
@@ -154,7 +159,9 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": src})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"data": src}); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +181,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		"data": sources,
 		"meta": map[string]int{"count": len(sources)},
 	}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -211,10 +220,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	includeChunks := true
 
 	if l := r.URL.Query().Get("limit"); l != "" {
-		fmt.Sscanf(l, "%d", &limit)
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
 	}
 	if o := r.URL.Query().Get("offset"); o != "" {
-		fmt.Sscanf(o, "%d", &offset)
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
 	}
 	if exc := r.URL.Query().Get("exclude_chunks"); exc == "true" {
 		includeChunks = false
@@ -230,7 +243,9 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": detail})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"data": detail}); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) GetPages(w http.ResponseWriter, r *http.Request) {
@@ -244,10 +259,12 @@ func (h *Handler) GetPages(w http.ResponseWriter, r *http.Request) {
 		pages = []SourcePage{}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"data": pages,
 		"meta": map[string]int{"count": len(pages)},
-	})
+	}); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
@@ -262,5 +279,7 @@ func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, m
 		"correlationId": middleware.GetCorrelationID(ctx),
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("failed to encode error response", "error", err)
+	}
 }

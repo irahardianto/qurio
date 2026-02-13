@@ -55,7 +55,7 @@ func TestChunkMarkdown(t *testing.T) {
 		}
 		// Total ~110 chars. Max 10 tokens (40 chars)
 		text := "```txt\n" + content + "```"
-		
+
 		chunks := ChunkMarkdown(text, 10, 0)
 		assert.True(t, len(chunks) > 1)
 		assert.Contains(t, chunks[0].Content, "```txt")
@@ -76,7 +76,7 @@ func TestChunkProse(t *testing.T) {
 		para1 := "Short paragraph."
 		para2 := "Another short paragraph."
 		text := para1 + "\n\n" + para2
-		
+
 		// If maxTokens is small enough to force split
 		// "Short paragraph." (16) -> Chunk 1
 		// "Another short paragraph." (24) -> Split to "Another short" (13) and "paragraph." (10)
@@ -89,11 +89,11 @@ func TestChunkProse(t *testing.T) {
 		line1 := "Line 1 is long enough."
 		line2 := "Line 2 is also long."
 		text := line1 + "\n" + line2
-		
+
 		chunks := chunkProse(text, 5, 0)
 		assert.True(t, len(chunks) >= 2)
 	})
-	
+
 	t.Run("Word Split", func(t *testing.T) {
 		// Very long line
 		text := "VeryLongWordThatExceedsLimit AnotherWord"

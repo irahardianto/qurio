@@ -2,14 +2,14 @@ package job_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
-	"database/sql"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/google/uuid"
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/testutils"
@@ -75,7 +75,7 @@ func TestJobRepo_Integration(t *testing.T) {
 	// 5. Verify Delete
 	err = jobRepo.Delete(ctx, j1.ID)
 	require.NoError(t, err)
-	
+
 	// Verify it's gone
 	_, err = jobRepo.Get(ctx, j1.ID)
 	assert.Error(t, err)
@@ -96,7 +96,9 @@ func TestJobRepo_Integration(t *testing.T) {
 }
 
 func TestJobRepo_Empty(t *testing.T) {
-	if testing.Short() { t.Skip() }
+	if testing.Short() {
+		t.Skip()
+	}
 	s := testutils.NewIntegrationSuite(t)
 	s.Setup()
 	defer s.Teardown()
@@ -114,7 +116,9 @@ func TestJobRepo_Empty(t *testing.T) {
 }
 
 func TestJobRepo_Get_NotFound(t *testing.T) {
-	if testing.Short() { t.Skip() }
+	if testing.Short() {
+		t.Skip()
+	}
 	s := testutils.NewIntegrationSuite(t)
 	s.Setup()
 	defer s.Teardown()

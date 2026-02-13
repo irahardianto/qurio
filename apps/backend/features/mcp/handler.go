@@ -23,8 +23,8 @@ type SourceManager interface {
 }
 
 type Handler struct {
-	retriever    Retriever
-	sourceMgr    SourceManager
+	retriever Retriever
+	sourceMgr SourceManager
 }
 
 func NewHandler(r Retriever, s SourceManager) *Handler {
@@ -127,7 +127,7 @@ func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONR
 			Result: ListToolsResult{
 				Tools: []Tool{
 					{
-						Name:        "qurio_search",
+						Name: "qurio_search",
 						Description: `Search & Exploration tool. Performs a hybrid search (Keyword + Vector). Use this for specific questions, finding code snippets, or exploring topics across known sources.
 
 ARGUMENT GUIDE:
@@ -183,7 +183,7 @@ USAGE EXAMPLES:
 						},
 					},
 					{
-						Name:        "qurio_list_sources",
+						Name: "qurio_list_sources",
 						Description: `Discovery tool. Lists all available documentation sets (sources) currently indexed. Use this at the start of a session to understand what documentation is available.
 
 USAGE EXAMPLE:
@@ -194,7 +194,7 @@ qurio_list_sources()`,
 						},
 					},
 					{
-						Name:        "qurio_list_pages",
+						Name: "qurio_list_pages",
 						Description: `Navigation tool. Lists all individual pages/documents within a specific source. Use this to find the exact URL of a document when a search query is too broad or to browse the table of contents.
 
 USAGE EXAMPLE:
@@ -211,7 +211,7 @@ qurio_list_pages(source_id="src_stripe_api")`,
 						},
 					},
 					{
-						Name:        "qurio_read_page",
+						Name: "qurio_read_page",
 						Description: `Deep Reading / Full Context tool. Retrieves the *entire* content of a specific page or document by its URL. Use this when a search result snippet is truncated or insufficient, or when you need to read a full guide/tutorial. Crucial: Always prefer this over guessing content if the search result is incomplete.
 
 USAGE EXAMPLE:
@@ -256,7 +256,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid search arguments")
 				return &resp
 			}
-			
+
 			if args.Query == "" {
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Query is required")
 				return &resp
@@ -285,7 +285,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInternal, "Search failed: "+err.Error())
 				return &resp
 			}
-			
+
 			var textResult string
 			if len(results) == 0 {
 				textResult = "No results found."
@@ -305,9 +305,9 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					if res.SourceID != "" {
 						textResult += fmt.Sprintf("SourceID: %s\n", res.SourceID)
 					}
-					
+
 					textResult += fmt.Sprintf("Content:\n%s\n", res.Content)
-					
+
 					// Optional: Show other metadata
 					// if len(res.Metadata) > 0 {
 					// 	meta, _ := json.Marshal(res.Metadata)
@@ -315,11 +315,11 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					// }
 					textResult += "\n---\n"
 				}
-				
+
 				textResult += "\nUse qurio_read_page(url=\"...\") to read the full content of any result.\n"
 			}
 
-			slog.Info("tool execution completed", "tool", "qurio_search", "result_count", len(results))
+			slog.Info("tool execution completed", "tool", "qurio_search", "result_count", len(results)) // #nosec G706 -- len() result is int, not tainted
 
 			return &JSONRPCResponse{
 				JSONRPC: "2.0",
@@ -364,7 +364,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				Type string `json:"type"`
 				URL  string `json:"url"`
 			}
-			
+
 			simpleSources := make([]SimpleSource, len(sources))
 			for i, s := range sources {
 				name := s.Name
@@ -413,7 +413,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
 				return &resp
 			}
-			
+
 			if args.SourceID == "" {
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "source_id is required")
 				return &resp
@@ -448,7 +448,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				ID  string `json:"id"`
 				URL string `json:"url"`
 			}
-			
+
 			simplePages := make([]SimplePage, len(pages))
 			for i, p := range pages {
 				simplePages[i] = SimplePage{
@@ -488,7 +488,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
 				return &resp
 			}
-			
+
 			if args.URL == "" {
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "URL is required")
 				return &resp
@@ -525,7 +525,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				}
 			}
 
-			slog.Info("tool execution completed", "tool", "qurio_read_page", "chunk_count", len(results))
+			slog.Info("tool execution completed", "tool", "qurio_read_page", "chunk_count", len(results)) // #nosec G706 -- len() result is int, not tainted
 
 			return &JSONRPCResponse{
 				JSONRPC: "2.0",
@@ -537,12 +537,12 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				},
 			}
 		}
-		
+
 		slog.Warn("method not found", "method", params.Name)
 		resp := makeErrorResponse(req.ID, ErrMethodNotFound, "Method not found: "+params.Name)
 		return &resp
 	}
-	
+
 	slog.Warn("unknown jsonrpc method", "method", req.Method)
 	resp := makeErrorResponse(req.ID, ErrMethodNotFound, "Method not found")
 	return &resp
@@ -560,7 +560,7 @@ func makeErrorResponse(id interface{}, code int, message string) JSONRPCResponse
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	slog.Info("mcp request received", "method", r.Method, "path", r.URL.Path)
+	slog.Info("mcp request received", "method", r.Method, "path", r.URL.Path) // #nosec G706 -- r.URL.Path is parsed by Go's net/http, not raw user input
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -597,7 +597,7 @@ func (h *Handler) writeError(w http.ResponseWriter, id interface{}, code int, me
 	// However, the helper above `writeError` was defined at file level? No, it's a method.
 	// Let's check if it's already defined in this file. It was in the previous version.
 	// I will just call it.
-	
+
 	resp := makeErrorResponse(id, code, message)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		slog.Error("failed to write error response", "error", err)

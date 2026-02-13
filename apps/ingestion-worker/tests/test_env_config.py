@@ -1,6 +1,5 @@
 from config import Settings
-import pytest
-import os
+
 
 def test_settings_load_from_env(monkeypatch):
     # Arrange
@@ -17,6 +16,7 @@ def test_settings_load_from_env(monkeypatch):
     assert settings.retry_initial_delay_ms == 500
     assert settings.retry_max_delay_ms == 30000
     assert settings.retry_backoff_multiplier == 3
+
 
 def test_settings_defaults(monkeypatch):
     # Arrange: Ensure strict isolation by removing vars if they exist

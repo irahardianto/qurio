@@ -8,8 +8,8 @@ import (
 )
 
 type MockSchemaClient struct {
-	CreatedClass *models.Class
-	ExistingClass *models.Class
+	CreatedClass    *models.Class
+	ExistingClass   *models.Class
 	AddedProperties []*models.Property
 }
 
@@ -69,7 +69,7 @@ func TestEnsureSchema_AddsMissingProperties(t *testing.T) {
 			{Name: "sourceId", DataType: []string{"string"}},
 		},
 	}
-	
+
 	client := &MockSchemaClient{
 		ExistingClass: existingClass,
 	}
@@ -117,7 +117,7 @@ func TestEnsureSchema_AddsNewMetadataProperties(t *testing.T) {
 			{Name: "language", DataType: []string{"string"}},
 		},
 	}
-	
+
 	client := &MockSchemaClient{
 		ExistingClass: existingClass,
 	}

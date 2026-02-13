@@ -15,7 +15,7 @@ func TestClient_Rerank_Jina(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/rerank", r.URL.Path)
 		assert.Equal(t, "Bearer k1", r.Header.Get("Authorization"))
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"results": []map[string]interface{}{
@@ -38,7 +38,7 @@ func TestClient_Rerank_Cohere(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/rerank", r.URL.Path)
 		assert.Equal(t, "Bearer k2", r.Header.Get("Authorization"))
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"results": []map[string]interface{}{

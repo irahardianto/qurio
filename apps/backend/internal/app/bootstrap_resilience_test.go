@@ -67,7 +67,7 @@ func TestBootstrap_Resilience_WeaviateDown(t *testing.T) {
 
 		WeaviateHost:   "localhost:54322", // Bad host
 		WeaviateScheme: "http",
-		
+
 		NSQDHost: goodCfg.NSQDHost, // Keep good NSQ to isolate Weaviate failure
 
 		BootstrapRetryAttempts:     2,

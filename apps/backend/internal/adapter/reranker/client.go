@@ -67,7 +67,7 @@ func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(req) // #nosec G704 -- URL is a known API endpoint (jina), not user-controlled
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([
 			indices = append(indices, r.Index)
 		}
 	}
-	
+
 	return indices, nil
 }
 
@@ -126,7 +126,7 @@ func (c *Client) rerankCohere(ctx context.Context, query string, docs []string) 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(req) // #nosec G704 -- URL is a known API endpoint (cohere), not user-controlled
 	if err != nil {
 		return nil, err
 	}

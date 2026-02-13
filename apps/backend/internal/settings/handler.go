@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"qurio/apps/backend/internal/middleware"
@@ -22,7 +23,9 @@ func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": s})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"data": s}); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
@@ -50,5 +53,7 @@ func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, m
 		"correlationId": middleware.GetCorrelationID(ctx),
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("failed to encode error response", "error", err)
+	}
 }

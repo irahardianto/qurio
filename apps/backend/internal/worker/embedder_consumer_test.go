@@ -13,7 +13,7 @@ import (
 func TestEmbedderConsumer_HandleMessage_Success(t *testing.T) {
 	e := new(MockEmbedder)
 	s := new(MockVectorStore)
-	
+
 	consumer := worker.NewEmbedderConsumer(e, s)
 
 	payload := worker.IngestEmbedPayload{
@@ -33,21 +33,21 @@ func TestEmbedderConsumer_HandleMessage_Success(t *testing.T) {
 	e.On("Embed", mock.Anything, mock.MatchedBy(func(text string) bool {
 		// Check that metadata is included in embedding context
 		return assert.Contains(t, text, "Title: Title") &&
-		       assert.Contains(t, text, "Author: John Doe") &&
-			   assert.Contains(t, text, "Created: 2023-01-01") &&
-			   assert.Contains(t, text, "Chunk Content")
+			assert.Contains(t, text, "Author: John Doe") &&
+			assert.Contains(t, text, "Created: 2023-01-01") &&
+			assert.Contains(t, text, "Chunk Content")
 	})).Return([]float32{0.1, 0.2}, nil)
 
 	// Expect Store call
 	s.On("StoreChunk", mock.Anything, mock.MatchedBy(func(c worker.Chunk) bool {
-		return c.SourceID == "src1" && 
-		       c.Author == "John Doe" && 
-			   c.Vector[0] == 0.1
+		return c.SourceID == "src1" &&
+			c.Author == "John Doe" &&
+			c.Vector[0] == 0.1
 	})).Return(nil)
 
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err)
-	
+
 	e.AssertExpectations(t)
 	s.AssertExpectations(t)
 }
@@ -59,7 +59,7 @@ func TestEmbedderConsumer_HandleMessage_EmbedError(t *testing.T) {
 
 	payload := worker.IngestEmbedPayload{
 		SourceID: "src1",
-		Content: "content",
+		Content:  "content",
 	}
 	body, _ := json.Marshal(payload)
 	msg := &nsq.Message{Body: body}
@@ -78,7 +78,7 @@ func TestEmbedderConsumer_HandleMessage_StoreError(t *testing.T) {
 
 	payload := worker.IngestEmbedPayload{
 		SourceID: "src1",
-		Content: "content",
+		Content:  "content",
 	}
 	body, _ := json.Marshal(payload)
 	msg := &nsq.Message{Body: body}
@@ -93,7 +93,7 @@ func TestEmbedderConsumer_HandleMessage_StoreError(t *testing.T) {
 func TestEmbedderConsumer_HandleMessage_PoisonPill(t *testing.T) {
 	consumer := worker.NewEmbedderConsumer(nil, nil)
 	msg := &nsq.Message{Body: []byte("invalid json")}
-	
+
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err) // No retry
 }

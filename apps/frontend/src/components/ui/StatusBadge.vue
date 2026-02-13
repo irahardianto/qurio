@@ -1,26 +1,26 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Badge } from '@/components/ui/badge'
+import { computed } from "vue";
+import { Badge } from "@/components/ui/badge";
 
 const props = defineProps<{
-  status: string
-}>()
+  status: string;
+}>();
 
 const variant = computed(() => {
   switch (props.status.toLowerCase()) {
-    case 'indexed':
-    case 'completed':
-      return 'default'
-    case 'processing':
-    case 'pending':
-    case 'in_progress':
-      return 'secondary'
-    case 'failed':
-      return 'destructive'
+    case "indexed":
+    case "completed":
+      return "default";
+    case "processing":
+    case "pending":
+    case "in_progress":
+      return "secondary";
+    case "failed":
+      return "destructive";
     default:
-      return 'outline'
+      return "outline";
   }
-})
+});
 </script>
 
 <template>

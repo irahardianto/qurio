@@ -109,7 +109,7 @@ Configuration is managed via the **Settings** page in the UI or environment vari
 
 > [!TIP]
 > **Unlock the full potential of your Agent**<br>
-> Check out the **[Agent Prompting Guide](docs/agent.md)** for best practices, workflow examples, and **system prompt templates** (`CLAUDE.md`, `GEMINI.md`) to paste into your project.
+> Check out the **[Agent Prompting Guide](docs/agent-prompting-guide.md)** for best practices, workflow examples, and **system prompt templates** (`CLAUDE.md`, `GEMINI.md`) to paste into your project.
 
 ### 1. Add Data Sources
 Navigate to the Admin Dashboard ([http://localhost:3000](http://localhost:3000)) and click **"Add Source"**.

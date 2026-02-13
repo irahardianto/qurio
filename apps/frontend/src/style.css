@@ -4,20 +4,20 @@
 
 :root {
   /* Brand Colors */
-  --color-void: #0F172A;
-  --color-surface: #1E293B;
+  --color-void: #0f172a;
+  --color-surface: #1e293b;
   --color-border: #334155;
-  --color-primary: #3B82F6;
-  --color-primary-hover: #2563EB;
-  --color-success: #10B981;
-  --color-text-main: #F8FAFC;
-  --color-text-muted: #94A3B8;
-  --color-danger: #EF4444;
-  --color-danger-hover: #DC2626;
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-success: #10b981;
+  --color-text-main: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
 
   /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
 
   /* Spacing */
   --radius-sm: 4px;
@@ -26,8 +26,8 @@
 }
 
 .icon {
-  height: 48px;       
-  width: auto;         
+  height: 48px;
+  width: auto;
   object-fit: contain;
 }
 
@@ -44,7 +44,12 @@ body {
   box-sizing: border-box;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin: 0;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -133,7 +138,7 @@ button {
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-    
+
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

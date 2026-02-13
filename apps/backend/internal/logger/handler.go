@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"log/slog"
+
 	"qurio/apps/backend/internal/middleware"
 )
 

@@ -41,7 +41,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		"data": jobs,
 		"meta": map[string]int{"count": len(jobs)},
 	}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.ErrorContext(ctx, "failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +65,9 @@ func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": "job retried"})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"data": "job retried"}); err != nil {
+		slog.ErrorContext(ctx, "failed to encode response", "error", err)
+	}
 }
 
 func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
@@ -78,5 +82,7 @@ func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, m
 		"correlationId": middleware.GetCorrelationID(ctx),
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("failed to encode error response", "error", err)
+	}
 }

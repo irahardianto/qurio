@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
-
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +19,7 @@ func TestCreateSource_MissingName(t *testing.T) {
 	handler := source.NewHandler(svc)
 
 	// Missing Name
-	body := []byte(`{"url":"https://example.com","type":"web"}`) 
+	body := []byte(`{"url":"https://example.com","type":"web"}`)
 	req := httptest.NewRequest("POST", "/sources", bytes.NewBuffer(body))
 	w := httptest.NewRecorder()
 

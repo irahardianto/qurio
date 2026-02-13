@@ -13,9 +13,9 @@ import (
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/adapter/weaviate"
+	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/testutils"
 	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/config"
 )
 
 // IntegrationMockEmbedder for integration test (we don't hit real Gemini)
@@ -108,13 +108,13 @@ func TestIngestIntegration(t *testing.T) {
 
 	// EmbedderConsumer (Worker)
 	embedderConsumer := worker.NewEmbedderConsumer(embedder, vectorStore)
-	
+
 	// Wire EmbedderConsumer to NSQ
 	nsqCfg := nsq.NewConfig()
 	embedNsqConsumer, err := nsq.NewConsumer(config.TopicIngestEmbed, "integration-test", nsqCfg)
 	require.NoError(t, err)
 	embedNsqConsumer.AddHandler(embedderConsumer)
-	
+
 	err = embedNsqConsumer.ConnectToNSQD(appCfg.NSQDHost)
 	require.NoError(t, err)
 	defer embedNsqConsumer.Stop()
@@ -163,7 +163,7 @@ func TestIngestIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// 4. Verify Side Effects
-	
+
 	// Wait for EmbedderConsumer to process
 	require.Eventually(t, func() bool {
 		chunks, err := vectorStore.GetChunks(ctx, src.ID, 100, 0)

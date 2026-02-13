@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/nsqio/go-nsq"
 	"qurio/apps/backend/features/job"
+	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/text"
-	"qurio/apps/backend/internal/config"
 )
 
 type PageDTO struct {
@@ -137,12 +137,12 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	if err != nil {
 		slog.WarnContext(ctx, "failed to fetch source config", "error", err)
 	}
-	
+
 	// 1. Delete Old Chunks (Idempotency)
 	if payload.URL != "" {
 		if err := h.store.DeleteChunksByURL(ctx, payload.SourceID, payload.URL); err != nil {
 			slog.ErrorContext(ctx, "failed to delete old chunks", "error", err)
-			return err 
+			return err
 		}
 	}
 
@@ -153,17 +153,17 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 			for i, c := range chunks {
 				// Construct IngestEmbedPayload
 				embedPayload := IngestEmbedPayload{
-					SourceID:      payload.SourceID,
-					SourceURL:     payload.URL,
-					SourceName:    sourceName,
-					Title:         payload.Title,
-					Path:          payload.Path,
-					
-					Content:       c.Content,
-					ChunkIndex:    i,
-					ChunkType:     string(c.Type),
-					Language:      c.Language,
-					
+					SourceID:   payload.SourceID,
+					SourceURL:  payload.URL,
+					SourceName: sourceName,
+					Title:      payload.Title,
+					Path:       payload.Path,
+
+					Content:    c.Content,
+					ChunkIndex: i,
+					ChunkType:  string(c.Type),
+					Language:   c.Language,
+
 					CorrelationID: correlationID,
 				}
 
@@ -176,7 +176,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 				if pages, ok := payload.Metadata["pages"].(float64); ok {
 					embedPayload.PageCount = int(pages)
 				}
-				
+
 				bytes, err := json.Marshal(embedPayload)
 				if err != nil {
 					slog.ErrorContext(ctx, "failed to marshal embed payload", "error", err)
@@ -202,7 +202,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		{
 			u, _ := url.Parse(payload.URL)
 			host := u.Host
-			
+
 			// Virtual Depth for llms.txt: Treat it as having +1 depth allowance
 			effectiveMaxDepth := maxDepth
 			isManifest := false
@@ -213,7 +213,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 			}
 
 			newPages := DiscoverLinks(payload.SourceID, host, payload.Links, payload.Depth, effectiveMaxDepth, exclusions)
-			
+
 			if len(newPages) > 0 {
 				newURLs, err := h.pageManager.BulkCreatePages(ctx, newPages)
 				if err != nil {
@@ -228,7 +228,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 					// If parent is llms.txt (depth=maxDepth), child will be maxDepth+1.
 					// The child won't discover further links because its depth > maxDepth.
 					// This is exactly what we want (1 level deeper than max).
-					
+
 					taskPayload, _ := json.Marshal(map[string]interface{}{
 						"type":           "web",
 						"url":            newURL,
@@ -268,6 +268,6 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 			slog.WarnContext(ctx, "failed to update source status to completed", "error", err)
 		}
 	}
-	
+
 	return nil
 }

@@ -2,10 +2,10 @@ package job_test
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"testing"
 	"time"
-	"encoding/json"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"

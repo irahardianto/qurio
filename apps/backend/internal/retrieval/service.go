@@ -3,22 +3,23 @@ package retrieval
 import (
 	"context"
 	"time"
+
 	"qurio/apps/backend/internal/settings"
 )
 
 type SearchResult struct {
-	Content   string                 `json:"content"`
-	Score     float32                `json:"score"`
-	Title     string                 `json:"title,omitempty"`
-	URL       string                 `json:"url,omitempty"`       // New
-	SourceID  string                 `json:"sourceId,omitempty"`  // New
-	SourceName string                `json:"sourceName,omitempty"` // New
-	Author    string                 `json:"author,omitempty"`    // New
-	CreatedAt string                 `json:"createdAt,omitempty"` // New
-	PageCount int                    `json:"pageCount,omitempty"` // New
-	Language  string                 `json:"language,omitempty"`  // New
-	Type      string                 `json:"type,omitempty"`      // New
-	Metadata  map[string]interface{} `json:"metadata"`
+	Content    string                 `json:"content"`
+	Score      float32                `json:"score"`
+	Title      string                 `json:"title,omitempty"`
+	URL        string                 `json:"url,omitempty"`        // New
+	SourceID   string                 `json:"sourceId,omitempty"`   // New
+	SourceName string                 `json:"sourceName,omitempty"` // New
+	Author     string                 `json:"author,omitempty"`     // New
+	CreatedAt  string                 `json:"createdAt,omitempty"`  // New
+	PageCount  int                    `json:"pageCount,omitempty"`  // New
+	Language   string                 `json:"language,omitempty"`   // New
+	Type       string                 `json:"type,omitempty"`       // New
+	Metadata   map[string]interface{} `json:"metadata"`
 }
 
 type SearchOptions struct {
@@ -120,7 +121,7 @@ func (s *Service) Search(ctx context.Context, query string, opts *SearchOptions)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		reranked := make([]SearchResult, len(indices))
 		for i, idx := range indices {
 			if idx < len(docs) {

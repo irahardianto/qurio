@@ -39,10 +39,10 @@ func TestResultConsumer_HandleMessage_Success(t *testing.T) {
 	// Expectations
 	// 1. Fetch Config
 	sf.On("GetSourceConfig", mock.Anything, "src1").Return(2, []string{}, "api-key", "My Source", nil)
-	
+
 	// 2. Delete Old Chunks
 	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
-	
+
 	// 3. Publish Embed Tasks (Chunking happens internally)
 	tp.On("Publish", config.TopicIngestEmbed, mock.MatchedBy(func(b []byte) bool {
 		var p worker.IngestEmbedPayload
@@ -66,14 +66,14 @@ func TestResultConsumer_HandleMessage_Success(t *testing.T) {
 
 	// 6. Update Page Status (Completed)
 	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "completed", "").Return(nil)
-	
+
 	// 7. Check Source Completion
 	pm.On("CountPendingPages", mock.Anything, "src1").Return(0, nil)
 	u.On("UpdateStatus", mock.Anything, "src1", "completed").Return(nil)
 
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err)
-	
+
 	s.AssertExpectations(t)
 	pm.AssertExpectations(t)
 	tp.AssertExpectations(t)
@@ -113,7 +113,7 @@ func TestResultConsumer_HandleMessage_Failure(t *testing.T) {
 
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err) // Should not error, handled gracefully
-	
+
 	pm.AssertExpectations(t)
 	u.AssertExpectations(t)
 	j.AssertExpectations(t)
@@ -171,7 +171,7 @@ func TestResultConsumer_HandleMessage_DeleteChunksError(t *testing.T) {
 	s := new(MockVectorStore)
 	// other mocks...
 	sf := new(MockSourceFetcher)
-	
+
 	consumer := worker.NewResultConsumer(s, nil, nil, sf, nil, nil)
 
 	payload := map[string]interface{}{
@@ -193,14 +193,14 @@ func TestResultConsumer_HandleMessage_DeleteChunksError(t *testing.T) {
 func TestResultConsumer_HandleMessage_PoisonPill(t *testing.T) {
 	consumer := worker.NewResultConsumer(nil, nil, nil, nil, nil, nil)
 	msg := &nsq.Message{Body: []byte("invalid json")}
-	
+
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err)
 }
 
 func TestResultConsumer_HandleMessage_MissingRequiredFields(t *testing.T) {
 	consumer := worker.NewResultConsumer(nil, nil, nil, nil, nil, nil)
-	
+
 	// Missing URL
 	payload := map[string]interface{}{"source_id": "src1"}
 	body, _ := json.Marshal(payload)
@@ -238,7 +238,7 @@ func TestResultConsumer_HandleMessage_LinkDiscoveryPublishFailure(t *testing.T) 
 
 	// Publish Web Task Failure
 	tp.On("Publish", config.TopicIngestWeb, mock.Anything).Return(assert.AnError)
-	
+
 	// Should mark new page as failed
 	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com/sub", "failed", mock.Anything).Return(nil)
 
@@ -249,7 +249,7 @@ func TestResultConsumer_HandleMessage_LinkDiscoveryPublishFailure(t *testing.T) 
 
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err) // Non-fatal for the consumer
-	
+
 	tp.AssertExpectations(t)
 	pm.AssertExpectations(t)
 }
@@ -259,7 +259,7 @@ func TestResultConsumer_HandleMessage_EmptyContent_NoEmbedPublish(t *testing.T) 
 	sf := new(MockSourceFetcher)
 	u := new(MockUpdater)
 	pm := new(MockPageManager)
-	
+
 	consumer := worker.NewResultConsumer(s, u, nil, sf, pm, nil)
 
 	payload := map[string]interface{}{

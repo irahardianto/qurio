@@ -61,7 +61,7 @@ func TestHandler_GetSettings(t *testing.T) {
 		data := body["data"].(map[string]interface{})
 		assert.Equal(t, "cohere", data["rerank_provider"])
 		assert.Equal(t, 0.5, data["search_alpha"])
-		
+
 		mockRepo.AssertExpectations(t)
 	})
 

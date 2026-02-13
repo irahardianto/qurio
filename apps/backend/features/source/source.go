@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"time"
 
-	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/settings"
-	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/config"
+	"qurio/apps/backend/internal/middleware"
+	"qurio/apps/backend/internal/settings"
+	"qurio/apps/backend/internal/worker"
 )
 
 type Source struct {
@@ -47,7 +47,7 @@ type Repository interface {
 	DeletePages(ctx context.Context, sourceID string) error
 	CountPendingPages(ctx context.Context, sourceID string) (int, error)
 	ResetStuckPages(ctx context.Context, timeout time.Duration) (int64, error)
-	
+
 	// Sources
 
 	Save(ctx context.Context, src *Source) error
@@ -160,7 +160,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 	} else {
 		slog.Info("published ingest task", "url", src.URL, "id", src.ID, "topic", topic)
 	}
-	
+
 	return nil
 }
 
@@ -220,14 +220,14 @@ func (s *Service) Get(ctx context.Context, id string, limit, offset int, include
 
 	totalChunks, err := s.chunkStore.CountChunksBySource(ctx, id)
 	if err != nil {
-		slog.Warn("failed to count chunks", "error", err, "source_id", id)
+		slog.Warn("failed to count chunks", "error", err, "source_id", id) // #nosec G706 -- id is from URL path param, not exploitable
 	}
 
 	var chunks []worker.Chunk
 	if includeChunks {
 		chunks, err = s.chunkStore.GetChunks(ctx, id, limit, offset)
 		if err != nil {
-			slog.Warn("failed to fetch chunks", "error", err, "source_id", id)
+			slog.Warn("failed to fetch chunks", "error", err, "source_id", id) // #nosec G706
 			chunks = []worker.Chunk{}
 		}
 	} else {

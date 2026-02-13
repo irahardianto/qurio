@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"qurio/apps/backend/internal/testutils"
 	"github.com/stretchr/testify/require"
+	"qurio/apps/backend/internal/testutils"
 )
 
 func TestSmoke_Startup(t *testing.T) {

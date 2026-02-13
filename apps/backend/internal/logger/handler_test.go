@@ -5,8 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"qurio/apps/backend/internal/middleware"
 	"testing"
+
+	"qurio/apps/backend/internal/middleware"
 )
 
 func TestContextHandler_Handle(t *testing.T) {

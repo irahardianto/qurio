@@ -31,7 +31,7 @@ func newMockWeaviateServer(t *testing.T, checkFunc func(r *http.Request, body ma
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		if checkFunc != nil {
 			checkFunc(r, body)
 		}
@@ -44,7 +44,7 @@ func newMockWeaviateServer(t *testing.T, checkFunc func(r *http.Request, body ma
 					"Get": map[string]interface{}{
 						"DocumentChunk": []interface{}{
 							map[string]interface{}{
-								"content": "hello world",
+								"content":  "hello world",
 								"sourceId": "src-1",
 								"_additional": map[string]interface{}{
 									"score": "0.95",
@@ -57,7 +57,7 @@ func newMockWeaviateServer(t *testing.T, checkFunc func(r *http.Request, body ma
 			json.NewEncoder(w).Encode(resp)
 			return
 		}
-		
+
 		if r.URL.Path == "/v1/objects" {
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -100,9 +100,9 @@ func TestStore_StoreChunk(t *testing.T) {
 	defer server.Close()
 
 	store := newTestStore(t, server)
-	
+
 	err := store.StoreChunk(context.Background(), worker.Chunk{
-		Content: "hello",
+		Content:  "hello",
 		SourceID: "src-1",
 	})
 	assert.NoError(t, err)
@@ -161,7 +161,7 @@ func TestStore_Search_NetworkError(t *testing.T) {
 
 	// 3. Call Search
 	_, err := store.Search(context.Background(), "test", []float32{0.1}, 0.5, 10, nil)
-	
+
 	// 4. Expect Error
 	assert.Error(t, err)
 }

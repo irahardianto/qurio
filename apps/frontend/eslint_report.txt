@@ -1,0 +1,67 @@
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/button/Button.vue
+  10:3  warning  Prop 'variant' requires default value to be set  vue/require-default-prop
+  11:3  warning  Prop 'size' requires default value to be set     vue/require-default-prop
+  12:3  warning  Prop 'class' requires default value to be set    vue/require-default-prop
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/dialog/DialogContent.vue
+  19:18  warning  '_' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/dialog/DialogDescription.vue
+  11:18  warning  '_' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/dialog/DialogTitle.vue
+  11:18  warning  '_' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/select/Select.spec.ts
+  3:10  error  'nextTick' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/select/SelectContent.vue
+  19:38  warning  Prop 'class' requires default value to be set  vue/require-default-prop
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/components/ui/tooltip/TooltipContent.vue
+  16:39  warning  Prop 'class' requires default value to be set  vue/require-default-prop
+  25:18  warning  '_' is assigned a value but never used         @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/jobs/job.store.ts
+   8:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  27:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  42:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/settings/Settings.spec.ts
+  41:11  error  'helpCircles' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  54:11  error  'wrapper' is assigned a value but never used      @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/settings/settings.store.ts
+  27:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  54:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/sources/SourceForm.spec.ts
+  75:11  error  'toggle' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/sources/SourceProgress.spec.ts
+  22:64  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  23:62  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  24:61  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  25:65  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  51:77  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/sources/source.store.spec.ts
+   70:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   77:57  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  185:60  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/sources/source.store.ts
+   56:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  103:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  120:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  135:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  165:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  197:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  232:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/irahardianto/works/projects/qurio/apps/frontend/src/features/stats/stats.store.ts
+  23:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 34 problems (25 errors, 9 warnings)
+

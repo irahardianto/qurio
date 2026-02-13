@@ -5,6 +5,7 @@ Thumbs.db
 *.log
 tmp/
 temp/
+.agent/
 
 # IDEs
 .idea/

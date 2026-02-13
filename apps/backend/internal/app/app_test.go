@@ -66,9 +66,17 @@ func TestNew_Success(t *testing.T) {
 type FakeDB struct{}
 
 func (f *FakeDB) PingContext(ctx context.Context) error { return nil }
-func (f *FakeDB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row { return nil }
-func (f *FakeDB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) { return nil, nil }
-func (f *FakeDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) { return nil, nil }
+func (f *FakeDB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return nil
+}
+
+func (f *FakeDB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return nil, nil
+}
+
+func (f *FakeDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return nil, nil
+}
 func (f *FakeDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) { return nil, nil }
 
 func TestNew_PanicsOnInvalidDB(t *testing.T) {
@@ -77,7 +85,7 @@ func TestNew_PanicsOnInvalidDB(t *testing.T) {
 	mockPub := &MockTaskPublisher{}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg := &config.Config{}
-	
+
 	fakeDB := &FakeDB{}
 
 	// Act & Assert

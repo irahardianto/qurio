@@ -16,7 +16,7 @@ func TestStore_CountChunksBySource(t *testing.T) {
 		assert.Contains(t, query, "DocumentChunk")
 		assert.Contains(t, query, "meta")
 		assert.Contains(t, query, "count")
-        assert.Contains(t, query, "sourceId")
+		assert.Contains(t, query, "sourceId")
 	})
 	defer server.Close()
 
@@ -28,11 +28,11 @@ func TestStore_CountChunksBySource(t *testing.T) {
 }
 
 func TestStore_GetChunks_Pagination(t *testing.T) {
-    server := newMockWeaviateServer(t, func(r *http.Request, body map[string]interface{}) {
+	server := newMockWeaviateServer(t, func(r *http.Request, body map[string]interface{}) {
 		assert.Equal(t, "/v1/graphql", r.URL.Path)
-        query := body["query"].(string)
-        assert.Contains(t, query, "limit: 10")
-        assert.Contains(t, query, "offset: 5")
+		query := body["query"].(string)
+		assert.Contains(t, query, "limit: 10")
+		assert.Contains(t, query, "offset: 5")
 	})
 	defer server.Close()
 

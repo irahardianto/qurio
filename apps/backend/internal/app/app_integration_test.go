@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	weaviate_adapter "qurio/apps/backend/internal/adapter/weaviate"
 	"qurio/apps/backend/internal/app"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/testutils"
 	"qurio/apps/backend/internal/worker"
-	weaviate_adapter "qurio/apps/backend/internal/adapter/weaviate"
 )
 
 // MockEmbedder for E2E
@@ -57,11 +57,11 @@ func TestApp_EndToEnd_Ingestion(t *testing.T) {
 	// 3. Initialize App
 	vecStore := weaviate_adapter.NewStore(s.Weaviate)
 	require.NoError(t, vecStore.EnsureSchema(context.Background()))
-	
+
 	opts := &app.Options{
 		Embedder: mockEmbedder,
 	}
-	
+
 	application, err := app.New(cfg, s.DB, vecStore, s.NSQ, logger, opts)
 	require.NoError(t, err)
 
@@ -81,7 +81,7 @@ func TestApp_EndToEnd_Ingestion(t *testing.T) {
 	// Wait for NSQ message on 'ingest.task.web'
 	webMsg := s.ConsumeOne(config.TopicIngestWeb)
 	require.NotNil(t, webMsg, "Should receive web task")
-	
+
 	var taskPayload map[string]interface{}
 	err = json.Unmarshal(webMsg.Body, &taskPayload)
 	require.NoError(t, err)
@@ -98,12 +98,12 @@ func TestApp_EndToEnd_Ingestion(t *testing.T) {
 		"depth":     0,
 	}
 	resultBody, _ := json.Marshal(resultPayload)
-	
+
 	msg := &nsq.Message{
 		Body: resultBody,
 		ID:   nsq.MessageID{'1'},
 	}
-	
+
 	// Execute Result Consumer Logic
 	err = application.ResultConsumer.HandleMessage(msg)
 	require.NoError(t, err)

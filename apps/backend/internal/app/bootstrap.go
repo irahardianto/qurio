@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"qurio/apps/backend/internal/config"
 	wstore "qurio/apps/backend/internal/adapter/weaviate"
+	"qurio/apps/backend/internal/config"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -30,7 +30,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	// Database
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPass, cfg.DBName)
-	
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
@@ -73,7 +73,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 		return nil, fmt.Errorf("weaviate client error: %w", err)
 	}
 	vecStore := wstore.NewStore(wClient)
-	
+
 	// Ensure Schema Retry
 	if err := EnsureSchemaWithRetry(ctx, vecStore, cfg.BootstrapRetryAttempts, retryDelay); err != nil {
 		return nil, fmt.Errorf("weaviate schema error: %w", err)
@@ -86,9 +86,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	if err != nil {
 		return nil, fmt.Errorf("nsq producer error: %w", err)
 	}
-    
-    // Topic pre-creation (Logic from main.go)
-    createTopics(cfg.NSQDHost)
+
+	// Topic pre-creation (Logic from main.go)
+	createTopics(cfg.NSQDHost)
 
 	return &Dependencies{
 		DB:          db,
@@ -105,7 +105,14 @@ func createTopics(nsqdHost string) {
 
 	create := func(topic string) {
 		url := fmt.Sprintf("http://%s:4151/topic/create?topic=%s", host, topic)
-		http.Post(url, "application/json", nil)
+		resp, err := http.Post(url, "application/json", nil) // #nosec G107 -- URL is built from internal NSQ config, not user input
+		if err != nil {
+			slog.Warn("failed to create NSQ topic", "topic", topic, "error", err)
+			return
+		}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Warn("failed to close NSQ topic creation response body", "error", closeErr)
+		}
 	}
 
 	go func() {

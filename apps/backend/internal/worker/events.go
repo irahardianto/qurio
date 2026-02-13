@@ -1,11 +1,11 @@
 package worker
 
 type IngestEmbedPayload struct {
-	SourceID      string `json:"source_id"`
-	SourceURL     string `json:"source_url"`
-	SourceName    string `json:"source_name"`
-	Title         string `json:"title"`
-	Path          string `json:"path"`
+	SourceID   string `json:"source_id"`
+	SourceURL  string `json:"source_url"`
+	SourceName string `json:"source_name"`
+	Title      string `json:"title"`
+	Path       string `json:"path"`
 
 	// Chunk Data
 	Content    string `json:"content"`

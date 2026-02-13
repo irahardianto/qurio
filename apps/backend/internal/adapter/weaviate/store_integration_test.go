@@ -141,7 +141,7 @@ func TestWeaviateStore_GetChunks(t *testing.T) {
 	results, err := store.GetChunksByURL(ctx, url)
 	require.NoError(t, err)
 	assert.Len(t, results, 15)
-	
+
 	// Verify sort order
 	for i, res := range results {
 		// GetChunksByURL returns retrieval.SearchResult
