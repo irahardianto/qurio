@@ -63,7 +63,7 @@ const isActive = (path: string) => route.path === path;
         <span class="text-xs font-mono text-muted-foreground">System Online</span>
       </div>
       <div class="mt-1 text-xs font-mono text-muted-foreground/50">
-        v0.7.6
+        v0.8.2
       </div>
     </div>
   </aside>

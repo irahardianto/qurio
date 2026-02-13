@@ -85,6 +85,22 @@ def _classify_crawl_error(error_message: str) -> IngestionError:
     return IngestionError(ERR_CRAWL_TIMEOUT, error_message)
 
 
+def _get_raw_markdown(result: Any) -> str:
+    """
+    Extract raw markdown string from a crawl4ai result.
+
+    In crawl4ai v0.5+, result.markdown is a MarkdownGenerationResult object.
+    This helper safely extracts the raw markdown string for use in regex-based
+    link extraction and title extraction.
+    """
+    md = result.markdown
+    if hasattr(md, "raw_markdown"):
+        return md.raw_markdown or ""
+    if isinstance(md, str):
+        return md
+    return str(md) if md else ""
+
+
 def extract_web_metadata(result, url: str) -> dict:
     """
     Extracts metadata (title, path, links) from a crawl result.
@@ -99,8 +115,10 @@ def extract_web_metadata(result, url: str) -> dict:
                 internal_links.append(link["href"])
 
     # Additional Regex Extraction for Markdown (e.g. llms.txt)
-    if result.markdown:
-        markdown_links = re.findall(r"\[.*?\]\((.*?)\)", result.markdown)
+    # Always use raw markdown for link discovery — fit_markdown may have links stripped
+    raw_md = _get_raw_markdown(result)
+    if raw_md:
+        markdown_links = re.findall(r"\[.*?\]\((.*?)\)", raw_md)
         parsed_base = urlparse(url)
         base_domain = parsed_base.netloc
 
@@ -116,8 +134,8 @@ def extract_web_metadata(result, url: str) -> dict:
 
     # Extract title (simplistic regex fallback if not in result)
     title = ""
-    if result.markdown:
-        match = re.search(r"^#\s+(.+)$", result.markdown, re.MULTILINE)
+    if raw_md:
+        match = re.search(r"^#\s+(.+)$", raw_md, re.MULTILINE)
         if match:
             title = match.group(1).strip()
 
@@ -127,6 +145,34 @@ def extract_web_metadata(result, url: str) -> dict:
     path_str = " > ".join(path_segments)
 
     return {"title": title, "path": path_str, "links": internal_links}
+
+
+def _get_embedding_content(result: Any) -> str:
+    """
+    Extract clean content for embedding from a crawl4ai result.
+
+    In crawl4ai v0.5+, result.markdown is a MarkdownGenerationResult object
+    with fit_markdown (LLM-filtered) and raw_markdown (unfiltered). We prefer
+    fit_markdown because it has navigation, sidebars, and boilerplate removed.
+
+    Falls back to raw_markdown or string form for backwards compatibility.
+    """
+    md = result.markdown
+
+    # Handle MarkdownGenerationResult object (crawl4ai v0.5+)
+    if hasattr(md, "fit_markdown"):
+        fit = md.fit_markdown
+        if fit and fit.strip():
+            return fit
+        # fit_markdown empty (e.g. .txt files, filter produced nothing)
+        raw = getattr(md, "raw_markdown", "")
+        return raw if raw else ""
+
+    # Handle plain string (older crawl4ai or pre-filtered content)
+    if isinstance(md, str):
+        return md
+
+    return str(md) if md else ""
 
 
 def default_crawler_factory(config=None, **kwargs):
@@ -212,7 +258,7 @@ async def handle_web_task(
                     "url": result.url,
                     "title": meta["title"],
                     "path": meta["path"],
-                    "content": result.markdown,
+                    "content": _get_embedding_content(result),
                     "links": meta["links"],
                 }
             ]

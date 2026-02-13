@@ -21,10 +21,99 @@ type ChunkResult struct {
 	Language string
 }
 
+// CleanMarkdownNoise removes common documentation boilerplate from markdown
+// before chunking. This is a pre-processing step that strips patterns that
+// would never be useful in a code-assistance search context.
+func CleanMarkdownNoise(text string) string {
+	// Strip "Edit this page" style links
+	editLinkRe := regexp.MustCompile(`(?mi)^\[edit[^\]]*\]\([^\)]+\)\s*$`)
+	text = editLinkRe.ReplaceAllString(text, "")
+
+	// Strip auto-generated "Table of Contents" sections
+	// Match "## Table of Contents" or "## Contents" followed by link-only lines
+	tocRe := regexp.MustCompile(`(?mi)^#{1,3}\s+(?:table of )?contents?\s*\n(?:\s*[-*]\s*\[.*?\]\(#.*?\)\s*\n)*`)
+	text = tocRe.ReplaceAllString(text, "")
+
+	return text
+}
+
+// IsNoiseChunk identifies chunks that are too low-value to embed.
+// These are conservative heuristics — better to let a borderline chunk through
+// than accidentally filter useful content.
+func IsNoiseChunk(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if len(trimmed) == 0 {
+		return true
+	}
+
+	// Ultra-short labels (e.g., "Overview", "Getting Started") — no code, few words
+	words := strings.Fields(trimmed)
+	if len(trimmed) < 30 && len(words) <= 3 && !strings.Contains(trimmed, "```") && !strings.Contains(trimmed, "\n") {
+		return true
+	}
+
+	// Install-only commands
+	installRe := regexp.MustCompile(`(?mi)^\s*(npm|pnpm|yarn|pip|cargo|brew|apt|go)\s+(install|add|get|i)\b`)
+	lines := strings.Split(trimmed, "\n")
+	nonEmptyLines := filterNonEmpty(lines)
+	if len(nonEmptyLines) > 0 && len(nonEmptyLines) <= 3 {
+		allInstall := true
+		for _, line := range nonEmptyLines {
+			if !installRe.MatchString(line) {
+				allInstall = false
+				break
+			}
+		}
+		if allInstall {
+			return true
+		}
+	}
+
+	// Pure navigation link lists (>70% of lines are markdown links)
+	if len(nonEmptyLines) > 2 {
+		linkRe := regexp.MustCompile(`^\s*[-*]?\s*\[.*?\]\(.*?\)\s*$`)
+		linkCount := 0
+		for _, line := range nonEmptyLines {
+			if linkRe.MatchString(line) {
+				linkCount++
+			}
+		}
+		if float64(linkCount)/float64(len(nonEmptyLines)) > 0.7 {
+			return true
+		}
+	}
+
+	// Copyright/legal boilerplate
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(lower, "©") || strings.Contains(lower, "all rights reserved") ||
+		strings.Contains(lower, "terms of service") || strings.Contains(lower, "privacy policy") {
+		// Only noise if the chunk is short (not a full legal document that user intentionally indexed)
+		if len(trimmed) < 200 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func filterNonEmpty(lines []string) []string {
+	var result []string
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			result = append(result, l)
+		}
+	}
+	return result
+}
+
 // ChunkMarkdown implements a simplified chunker that splits text into chunks,
 // preserving code blocks and identifying their language.
 // It also splits large prose blocks into smaller chunks.
+// Low-value noise chunks (install commands, nav links, etc.) are filtered out.
 func ChunkMarkdown(text string, maxTokens, overlap int) []ChunkResult {
+	// Pre-process: remove common documentation boilerplate
+	text = CleanMarkdownNoise(text)
+
 	var results []ChunkResult
 
 	// Regex for code fences: ```lang\n content \n```
@@ -87,7 +176,15 @@ func ChunkMarkdown(text string, maxTokens, overlap int) []ChunkResult {
 		}
 	}
 
-	return results
+	// Post-filter: remove noise chunks
+	filtered := make([]ChunkResult, 0, len(results))
+	for _, chunk := range results {
+		if !IsNoiseChunk(chunk.Content) {
+			filtered = append(filtered, chunk)
+		}
+	}
+
+	return filtered
 }
 
 // chunkProse splits prose into chunks respecting structure: Headers -> Paragraphs -> Lines -> Words

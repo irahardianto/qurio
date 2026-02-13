@@ -575,3 +575,148 @@ async def test_classify_crawl_error_forbidden():
 
     err = _classify_crawl_error("403 Forbidden")
     assert err.code == ERR_CRAWL_BLOCKED
+
+
+# --- Embedding Content Extraction Tests ---
+
+
+def test_get_embedding_content_prefers_fit_markdown():
+    """Verify fit_markdown (LLM-filtered) is used over raw_markdown for embedding."""
+    from handlers.web import _get_embedding_content
+
+    result = MagicMock()
+    md = MagicMock()
+    md.fit_markdown = "# Clean Content\nFiltered documentation"
+    md.raw_markdown = "# Clean Content\nFiltered documentation\n[Nav Link](http://x.com)\nSidebar noise"
+    result.markdown = md
+
+    content = _get_embedding_content(result)
+
+    assert content == "# Clean Content\nFiltered documentation"
+    assert "Nav Link" not in content
+    assert "Sidebar noise" not in content
+
+
+def test_get_embedding_content_falls_back_to_raw():
+    """When fit_markdown is empty, fall back to raw_markdown."""
+    from handlers.web import _get_embedding_content
+
+    result = MagicMock()
+    md = MagicMock()
+    md.fit_markdown = ""  # Empty — e.g. .txt files or filter produced nothing
+    md.raw_markdown = "Plain text content from .txt file"
+    result.markdown = md
+
+    content = _get_embedding_content(result)
+
+    assert content == "Plain text content from .txt file"
+
+
+def test_get_embedding_content_falls_back_to_raw_whitespace():
+    """When fit_markdown is only whitespace, fall back to raw_markdown."""
+    from handlers.web import _get_embedding_content
+
+    result = MagicMock()
+    md = MagicMock()
+    md.fit_markdown = "   \n  "  # Whitespace only
+    md.raw_markdown = "Real content here"
+    result.markdown = md
+
+    content = _get_embedding_content(result)
+
+    assert content == "Real content here"
+
+
+def test_get_embedding_content_handles_plain_string():
+    """Backwards compatibility: plain string markdown still works."""
+    from handlers.web import _get_embedding_content
+
+    result = MagicMock()
+    result.markdown = "# Simple String Content"
+
+    content = _get_embedding_content(result)
+
+    assert content == "# Simple String Content"
+
+
+def test_get_embedding_content_handles_none():
+    """Handle None markdown gracefully."""
+    from handlers.web import _get_embedding_content
+
+    result = MagicMock()
+    result.markdown = None
+
+    content = _get_embedding_content(result)
+
+    assert content == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_uses_fit_markdown_for_content():
+    """Integration: handle_web_task returns fit_markdown for content, not raw."""
+    from handlers.web import handle_web_task
+
+    mock_crawler = AsyncMock()
+
+    async def side_effect(url, config=None):
+        res = MagicMock()
+        if url.endswith("llms.txt"):
+            res.success = False
+        else:
+            res.success = True
+            # Simulate MarkdownGenerationResult object
+            md = MagicMock()
+            md.fit_markdown = "# API Reference\nClean filtered content"
+            md.raw_markdown = "# API Reference\nClean filtered content\n[Home](/) [About](/about)\nNav sidebar noise"
+            res.markdown = md
+            res.url = "http://example.com/docs/api"
+            res.links = {
+                "internal": [
+                    {"href": "http://example.com/docs/guide"},
+                ],
+            }
+        return res
+
+    mock_crawler.arun.side_effect = side_effect
+
+    result = await handle_web_task("http://example.com/docs/api", crawler=mock_crawler)
+
+    # Content should be the FILTERED version
+    assert result[0]["content"] == "# API Reference\nClean filtered content"
+    assert "Nav sidebar noise" not in result[0]["content"]
+
+    # Links should still be discovered from result.links (untouched)
+    assert "http://example.com/docs/guide" in result[0]["links"]
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_link_discovery_uses_raw_markdown():
+    """Verify link extraction from markdown uses raw content, not filtered."""
+    from handlers.web import handle_web_task
+
+    mock_crawler = AsyncMock()
+
+    async def side_effect(url, config=None):
+        res = MagicMock()
+        if url.endswith("llms.txt"):
+            res.success = False
+        else:
+            res.success = True
+            # fit_markdown has NO links (because they were filtered)
+            md = MagicMock()
+            md.fit_markdown = "# Docs\nClean content only"
+            # raw_markdown has links (for discovery)
+            md.raw_markdown = "# Docs\nClean content only\n[Guide](/guide)\n[API](/api)"
+            res.markdown = md
+            res.url = "http://example.com/docs"
+            res.links = {"internal": []}  # No DOM-parsed links
+        return res
+
+    mock_crawler.arun.side_effect = side_effect
+
+    result = await handle_web_task("http://example.com/docs", crawler=mock_crawler)
+
+    # Markdown regex link extraction should find links from raw markdown
+    links = result[0]["links"]
+    assert "http://example.com/guide" in links
+    assert "http://example.com/api" in links

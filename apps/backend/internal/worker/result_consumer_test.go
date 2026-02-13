@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/nsqio/go-nsq"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/worker"
+
+	"github.com/nsqio/go-nsq"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestResultConsumer_HandleMessage_Success(t *testing.T) {
@@ -27,7 +28,7 @@ func TestResultConsumer_HandleMessage_Success(t *testing.T) {
 	payload := map[string]interface{}{
 		"source_id": "src1",
 		"url":       "http://example.com",
-		"content":   "Some content",
+		"content":   "This is a longer content string that should not be filtered as noise by the chunker.",
 		"title":     "Title",
 		"status":    "success",
 		"links":     []string{"http://example.com/subpage"},
@@ -47,7 +48,7 @@ func TestResultConsumer_HandleMessage_Success(t *testing.T) {
 	tp.On("Publish", config.TopicIngestEmbed, mock.MatchedBy(func(b []byte) bool {
 		var p worker.IngestEmbedPayload
 		json.Unmarshal(b, &p)
-		return p.SourceID == "src1" && p.SourceName == "My Source" && p.Content == "Some content"
+		return p.SourceID == "src1" && p.SourceName == "My Source" && p.Content == "This is a longer content string that should not be filtered as noise by the chunker."
 	})).Return(nil)
 
 	// 4. Update Body Hash
@@ -132,7 +133,7 @@ func TestResultConsumer_HandleMessage_LLMsTxt_ExtendedDepth(t *testing.T) {
 	payload := map[string]interface{}{
 		"source_id": "src1",
 		"url":       "http://example.com/llms.txt",
-		"content":   "content",
+		"content":   "This is enough content to pass the noise filter and be embedded successfully.",
 		"links":     []string{"http://example.com/doc.md"},
 		"depth":     2,
 	}
@@ -222,7 +223,7 @@ func TestResultConsumer_HandleMessage_LinkDiscoveryPublishFailure(t *testing.T) 
 	payload := map[string]interface{}{
 		"source_id": "src1",
 		"url":       "http://example.com",
-		"content":   "c",
+		"content":   "Content must be long enough to be embedded and not ignored as noise.",
 		"links":     []string{"http://example.com/sub"},
 	}
 	body, _ := json.Marshal(payload)

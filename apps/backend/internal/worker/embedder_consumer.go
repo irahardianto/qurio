@@ -7,8 +7,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/nsqio/go-nsq"
 	"qurio/apps/backend/internal/middleware"
+
+	"github.com/nsqio/go-nsq"
 )
 
 type EmbedderConsumer struct {
@@ -41,16 +42,13 @@ func (h *EmbedderConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	// Reconstruct Contextual String
-	// Format:
-	// Title: <Page Title>
-	// URL: <Page URL>
-	// Type: <Content Type>
-	// Author: <Author> (Optional)
-	// Created: <Created At> (Optional)
-	// ---
-	// <Raw Chunk Content>
-	contextualString := fmt.Sprintf("Title: %s\nSource: %s\nPath: %s\nURL: %s\nType: %s",
-		payload.Title, payload.SourceName, payload.Path, payload.SourceURL, payload.ChunkType)
+	// Embeds source context alongside chunk content to improve semantic search.
+	// SourceName is prominent to help disambiguate results from different
+	// documentation sources (e.g., Vue vs React vs Astro docs).
+	// URL and Type are omitted — they don't help the embedding model understand
+	// semantics, and remain available as Weaviate metadata for filtering.
+	contextualString := fmt.Sprintf("Documentation: %s\nTitle: %s\nSection: %s",
+		payload.SourceName, payload.Title, payload.Path)
 
 	if payload.Author != "" {
 		contextualString += fmt.Sprintf("\nAuthor: %s", payload.Author)

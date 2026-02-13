@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"qurio/apps/backend/internal/worker"
+
 	"github.com/nsqio/go-nsq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"qurio/apps/backend/internal/worker"
 )
 
 func TestEmbedderConsumer_HandleMessage_Success(t *testing.T) {
@@ -32,7 +33,8 @@ func TestEmbedderConsumer_HandleMessage_Success(t *testing.T) {
 	// Expect Embed call with formatted context string
 	e.On("Embed", mock.Anything, mock.MatchedBy(func(text string) bool {
 		// Check that metadata is included in embedding context
-		return assert.Contains(t, text, "Title: Title") &&
+		return assert.Contains(t, text, "Documentation:") &&
+			assert.Contains(t, text, "Title: Title") &&
 			assert.Contains(t, text, "Author: John Doe") &&
 			assert.Contains(t, text, "Created: 2023-01-01") &&
 			assert.Contains(t, text, "Chunk Content")

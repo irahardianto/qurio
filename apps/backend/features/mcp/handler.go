@@ -295,6 +295,12 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					if res.Title != "" {
 						textResult += fmt.Sprintf("Title: %s\n", res.Title)
 					}
+					if res.SourceName != "" {
+						textResult += fmt.Sprintf("Source: %s\n", res.SourceName)
+					}
+					if res.URL != "" {
+						textResult += fmt.Sprintf("URL: %s\n", res.URL)
+					}
 					// Extract Type, Language, and SourceID from explicit fields
 					if res.Type != "" {
 						textResult += fmt.Sprintf("Type: %s\n", res.Type)
