@@ -7,7 +7,8 @@ from tornado.iostream import StreamClosedError
 import structlog
 from config import settings
 from handlers.web import handle_web_task
-from handlers.file import handle_file_task, IngestionError
+from handlers.file import handle_file_task
+from exceptions import IngestionError, TRANSIENT_ERRORS
 from logger import configure_logger
 from crawl4ai import AsyncWebCrawler
 
@@ -26,6 +27,25 @@ CRAWLER = None
 # Defaulting to 8 matches the typical core count/worker capacity.
 # Initialized to a safe default (1) to support tests/imports; overwritten in main().
 WORKER_SEMAPHORE = asyncio.Semaphore(1)
+
+
+def _is_transient_error(e: Exception) -> bool:
+    """Determine if an error is transient and eligible for automatic retry."""
+    if isinstance(e, asyncio.TimeoutError):
+        return True
+    if isinstance(e, IngestionError) and e.code in TRANSIENT_ERRORS:
+        return True
+    err_str = str(e).upper()
+    return any(
+        kw in err_str
+        for kw in [
+            "TIMEOUT",
+            "TIMED_OUT",
+            "CONNECTION",
+            "ERR_NAME_NOT_RESOLVED",
+            "ECONNREFUSED",
+        ]
+    )
 
 
 async def init_crawler():
@@ -154,6 +174,31 @@ async def process_message(message):
     except IngestionError as e:
         logger.error("ingestion_error", error=str(e), code=e.code)
 
+        # Check if this is a transient IngestionError eligible for requeue
+        if (
+            e.code in TRANSIENT_ERRORS
+            and message.attempts <= settings.retry_max_attempts
+        ):
+            backoff_factor = settings.retry_backoff_multiplier ** (message.attempts - 1)
+            delay = min(
+                settings.retry_initial_delay_ms * backoff_factor,
+                settings.retry_max_delay_ms,
+            )
+            logger.warning(
+                "task_requeue_transient_ingestion_error",
+                source_id=source_id if "source_id" in locals() else "unknown",
+                attempt=message.attempts,
+                delay_ms=delay,
+                code=e.code,
+                error=str(e),
+            )
+            try:
+                message.requeue(delay=int(delay), backoff=True)
+            except Exception as req_ex:
+                logger.error("requeue_failed", error=str(req_ex))
+            return
+
+        # Permanent error or max retries exceeded: publish failure and finish
         if producer and "source_id" in locals():
             error_code = e.code
             fail_payload = {
@@ -190,12 +235,8 @@ async def process_message(message):
         return
 
     except (asyncio.TimeoutError, Exception) as e:
-        # Check for transient errors
-        is_transient = (
-            "Timeout" in str(e)
-            or "Connection" in str(e)
-            or isinstance(e, asyncio.TimeoutError)
-        )
+        # Check for transient errors using robust detection
+        is_transient = _is_transient_error(e)
 
         if is_transient and message.attempts <= settings.retry_max_attempts:
             # Exponential Backoff (in milliseconds)

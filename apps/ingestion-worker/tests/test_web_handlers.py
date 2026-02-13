@@ -94,6 +94,7 @@ async def test_handle_web_task_success():
 @pytest.mark.asyncio
 async def test_handle_web_task_failure():
     from handlers.web import handle_web_task
+    from exceptions import IngestionError
 
     # Mock result
     mock_result = MagicMock()
@@ -104,8 +105,9 @@ async def test_handle_web_task_failure():
     mock_crawler = AsyncMock()
     mock_crawler.arun.return_value = mock_result
 
-    with pytest.raises(Exception, match="Crawl failed: Failed"):
-        await handle_web_task("http://example.com", crawler=mock_crawler)
+    with patch("handlers.web.asyncio.sleep", new_callable=AsyncMock):
+        with pytest.raises(IngestionError, match="Failed"):
+            await handle_web_task("http://example.com", crawler=mock_crawler)
 
 
 @pytest.mark.asyncio
@@ -160,3 +162,121 @@ async def test_handle_web_task_auth_precedence():
             api_token="custom-key",
             temperature=1.0,
         )
+
+
+# --- Error Classification Tests ---
+
+
+def test_classify_crawl_error_timeout():
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_TIMEOUT
+
+    err = _classify_crawl_error(
+        "Failed on navigating ACS-GOTO: Page.goto: net::ERR_TIMED_OUT at https://example.com"
+    )
+    assert err.code == ERR_CRAWL_TIMEOUT
+
+
+def test_classify_crawl_error_dns():
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_DNS
+
+    err = _classify_crawl_error(
+        "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.com"
+    )
+    assert err.code == ERR_CRAWL_DNS
+
+
+def test_classify_crawl_error_connection_refused():
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_REFUSED
+
+    err = _classify_crawl_error(
+        "Page.goto: net::ERR_CONNECTION_REFUSED at https://example.com"
+    )
+    assert err.code == ERR_CRAWL_REFUSED
+
+
+def test_classify_crawl_error_blocked():
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_BLOCKED
+
+    err = _classify_crawl_error("blocked by robots.txt")
+    assert err.code == ERR_CRAWL_BLOCKED
+
+
+def test_classify_crawl_error_unknown_defaults_to_timeout():
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_TIMEOUT
+
+    # Unknown errors default to transient (timeout) for safety
+    err = _classify_crawl_error("some unknown error")
+    assert err.code == ERR_CRAWL_TIMEOUT
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_crawl_timeout_raises_ingestion_error():
+    """Verify that net::ERR_TIMED_OUT from crawl4ai raises IngestionError, not generic Exception."""
+    from handlers.web import handle_web_task
+    from exceptions import IngestionError, ERR_CRAWL_TIMEOUT
+
+    mock_result = MagicMock()
+    mock_result.success = False
+    mock_result.error_message = (
+        "Failed on navigating ACS-GOTO: Page.goto: net::ERR_TIMED_OUT"
+    )
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch("handlers.web.asyncio.sleep", new_callable=AsyncMock):
+        with pytest.raises(IngestionError) as exc_info:
+            await handle_web_task("http://example.com", crawler=mock_crawler)
+
+        assert exc_info.value.code == ERR_CRAWL_TIMEOUT
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_retries_transient_errors():
+    """Verify that transient errors trigger application-level retries."""
+    from handlers.web import handle_web_task, CRAWL_MAX_RETRIES
+
+    # Fail with timeout on all attempts
+    mock_result = MagicMock()
+    mock_result.success = False
+    mock_result.error_message = "net::ERR_TIMED_OUT"
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch("handlers.web.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with pytest.raises(Exception):
+            await handle_web_task("http://example.com", crawler=mock_crawler)
+
+        # Should have been called CRAWL_MAX_RETRIES + 1 times total
+        assert mock_crawler.arun.call_count == CRAWL_MAX_RETRIES + 1
+        # Sleep called CRAWL_MAX_RETRIES times (between retries)
+        assert mock_sleep.call_count == CRAWL_MAX_RETRIES
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_permanent_error_no_retry():
+    """Verify that permanent errors (e.g., robots.txt blocked) are NOT retried."""
+    from handlers.web import handle_web_task
+    from exceptions import IngestionError, ERR_CRAWL_BLOCKED
+
+    mock_result = MagicMock()
+    mock_result.success = False
+    mock_result.error_message = "blocked by robots.txt"
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch("handlers.web.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with pytest.raises(IngestionError) as exc_info:
+            await handle_web_task("http://example.com", crawler=mock_crawler)
+
+        assert exc_info.value.code == ERR_CRAWL_BLOCKED
+        # No retries — should only crawl once
+        assert mock_crawler.arun.call_count == 1
+        mock_sleep.assert_not_called()

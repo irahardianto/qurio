@@ -1,3 +1,5 @@
+from typing import Any
+
 import asyncio
 import structlog
 import re
@@ -6,8 +8,20 @@ from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, LLMConfig
 from crawl4ai.content_filter_strategy import LLMContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from config import settings as app_settings
+from exceptions import (
+    IngestionError,
+    ERR_CRAWL_TIMEOUT,
+    ERR_CRAWL_DNS,
+    ERR_CRAWL_REFUSED,
+    ERR_CRAWL_BLOCKED,
+    TRANSIENT_ERRORS,
+)
 
 logger = structlog.get_logger(__name__)
+
+# Retry configuration for transient crawl errors
+CRAWL_MAX_RETRIES = 2
+CRAWL_INITIAL_BACKOFF_S = 2.0
 
 INSTRUCTION = """
     Extract technical content from this software documentation page.
@@ -33,6 +47,42 @@ INSTRUCTION = """
     - Inline code references
     - Numbered lists for sequential steps
 """
+
+
+def _classify_crawl_error(error_message: str) -> IngestionError:
+    """
+    Classify a crawl4ai error message into a specific IngestionError.
+    Matches against known Playwright/Chromium net error patterns.
+    """
+    msg_upper = error_message.upper()
+
+    # Timeout errors (transient)
+    if "TIMED_OUT" in msg_upper or "TIMEOUT" in msg_upper:
+        return IngestionError(ERR_CRAWL_TIMEOUT, error_message)
+
+    # DNS resolution errors (transient — could be temporary DNS issues)
+    if "ERR_NAME_NOT_RESOLVED" in msg_upper or "DNS" in msg_upper:
+        return IngestionError(ERR_CRAWL_DNS, error_message)
+
+    # Connection errors (transient)
+    if any(
+        kw in msg_upper
+        for kw in [
+            "ERR_CONNECTION_REFUSED",
+            "ERR_CONNECTION_RESET",
+            "ERR_CONNECTION_CLOSED",
+            "ECONNREFUSED",
+            "ECONNRESET",
+        ]
+    ):
+        return IngestionError(ERR_CRAWL_REFUSED, error_message)
+
+    # Blocked by robots.txt or similar (permanent)
+    if "ROBOTS" in msg_upper or "BLOCKED" in msg_upper or "FORBIDDEN" in msg_upper:
+        return IngestionError(ERR_CRAWL_BLOCKED, error_message)
+
+    # Default: treat as timeout (transient) to be safe — better to retry than drop
+    return IngestionError(ERR_CRAWL_TIMEOUT, error_message)
 
 
 def extract_web_metadata(result, url: str) -> dict:
@@ -83,18 +133,34 @@ def default_crawler_factory(config=None, **kwargs):
     return AsyncWebCrawler(config=config, **kwargs)
 
 
+async def _crawl_single_page(crawler: Any, url: str, config: Any) -> Any:
+    """
+    Execute a single crawl attempt with outer timeout.
+    Returns the crawl result on success, raises IngestionError on failure.
+    """
+    outer_timeout = (app_settings.crawler_page_timeout / 1000) + 5.0
+
+    result = await asyncio.wait_for(
+        crawler.arun(url=url, config=config), timeout=outer_timeout
+    )
+
+    if not result.success:
+        raise _classify_crawl_error(result.error_message)
+
+    return result
+
+
 async def handle_web_task(
     url: str, api_key: str | None = None, crawler=None
 ) -> list[dict]:
     """
     Crawls a single page and returns content and discovered internal links.
+    Retries transient crawl errors with exponential backoff before escalating.
     """
     logger.info("crawl_starting", url=url)
 
     # Use passed api_key or fallback to settings
     token = api_key if api_key else app_settings.gemini_api_key
-
-    results = []
 
     # Configure Generator (Bypass LLM for .txt/llms.txt)
     if url.endswith(".txt") or url.endswith("llms.txt"):
@@ -113,31 +179,23 @@ async def handle_web_task(
 
     config = CrawlerRunConfig(
         cache_mode=CacheMode.ENABLED,
-        # Remove excluded_tags to ensure links in nav/sidebar are discovered.
-        # The LLMContentFilter will handle removing them from the content.
-        # excluded_tags=['nav', 'footer', 'aside', 'header'],
         exclude_external_links=True,
         markdown_generator=md_generator,
         check_robots_txt=True,
         page_timeout=app_settings.crawler_page_timeout,
     )
 
-    # Initialize crawler
-    try:
-        # Use existing crawler if provided, otherwise create a new ephemeral one
-        if crawler:
-            # Single page crawl using shared instance
-            # Use configured timeout (converted to seconds) plus a small buffer (e.g. 5s)
-            outer_timeout = (app_settings.crawler_page_timeout / 1000) + 5.0
+    last_error: Exception | None = None
 
-            result = await asyncio.wait_for(
-                crawler.arun(url=url, config=config), timeout=outer_timeout
-            )
+    for attempt in range(1, CRAWL_MAX_RETRIES + 2):  # 1 initial + CRAWL_MAX_RETRIES
+        try:
+            if crawler:
+                result = await _crawl_single_page(crawler, url, config)
+            else:
+                async with default_crawler_factory(verbose=True) as new_crawler:
+                    result = await _crawl_single_page(new_crawler, url, config)
 
-            if not result.success:
-                logger.error("crawl_failed", url=url, error=result.error_message)
-                raise Exception(f"Crawl failed: {result.error_message}")
-
+            # Success
             meta = extract_web_metadata(result, url)
 
             logger.info(
@@ -146,9 +204,10 @@ async def handle_web_task(
                 links_found=len(meta["links"]),
                 title=meta["title"],
                 path=meta["path"],
+                attempt=attempt,
             )
 
-            results.append(
+            return [
                 {
                     "url": result.url,
                     "title": meta["title"],
@@ -156,47 +215,54 @@ async def handle_web_task(
                     "content": result.markdown,
                     "links": meta["links"],
                 }
+            ]
+
+        except asyncio.TimeoutError:
+            last_error = IngestionError(
+                ERR_CRAWL_TIMEOUT,
+                f"Crawl timed out after {app_settings.crawler_page_timeout}ms",
             )
-            return results
-
-        else:
-            # Ephemeral crawler (old behavior)
-            async with default_crawler_factory(verbose=True) as new_crawler:
-                outer_timeout = (app_settings.crawler_page_timeout / 1000) + 5.0
-
-                result = await asyncio.wait_for(
-                    new_crawler.arun(url=url, config=config), timeout=outer_timeout
-                )
-
-                if not result.success:
-                    logger.error("crawl_failed", url=url, error=result.error_message)
-                    raise Exception(f"Crawl failed: {result.error_message}")
-
-                meta = extract_web_metadata(result, url)
-
-                logger.info(
-                    "crawl_completed",
+        except IngestionError as e:
+            last_error = e
+            # Permanent errors: don't retry
+            if e.code not in TRANSIENT_ERRORS:
+                logger.error(
+                    "crawl_permanent_error",
                     url=url,
-                    links_found=len(meta["links"]),
-                    title=meta["title"],
-                    path=meta["path"],
+                    error=str(e),
+                    code=e.code,
+                    attempt=attempt,
                 )
-
-                results.append(
-                    {
-                        "url": result.url,
-                        "title": meta["title"],
-                        "path": meta["path"],
-                        "content": result.markdown,
-                        "links": meta["links"],
-                    }
+                raise
+        except Exception as e:
+            # Unexpected error — classify it
+            last_error = _classify_crawl_error(str(e))
+            if last_error.code not in TRANSIENT_ERRORS:
+                logger.error(
+                    "crawl_permanent_error",
+                    url=url,
+                    error=str(e),
+                    attempt=attempt,
                 )
+                raise last_error
 
-                return results
+        # Transient error: retry with backoff (unless this was the last attempt)
+        if attempt <= CRAWL_MAX_RETRIES:
+            delay = CRAWL_INITIAL_BACKOFF_S * (2 ** (attempt - 1))
+            logger.warning(
+                "crawl_transient_retry",
+                url=url,
+                attempt=attempt,
+                next_delay_s=delay,
+                error=str(last_error),
+            )
+            await asyncio.sleep(delay)
 
-    except asyncio.TimeoutError:
-        logger.error("crawl_timeout", url=url)
-        raise
-    except Exception as e:
-        logger.error("crawl_exception", url=url, error=str(e))
-        raise
+    # All retries exhausted
+    logger.error(
+        "crawl_retries_exhausted",
+        url=url,
+        attempts=CRAWL_MAX_RETRIES + 1,
+        error=str(last_error),
+    )
+    raise last_error  # type: ignore[misc]

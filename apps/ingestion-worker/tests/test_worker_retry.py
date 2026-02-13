@@ -63,3 +63,41 @@ async def test_fail_on_max_retries():
             mock_msg.finish.assert_called()
             mock_msg.requeue.assert_not_called()
             mock_producer.pub.assert_called()  # Publish failure
+
+
+@pytest.mark.asyncio
+async def test_requeue_on_crawl_timeout_ingestion_error():
+    """Verify that IngestionError(ERR_CRAWL_TIMEOUT) triggers requeue with backoff."""
+    from exceptions import IngestionError, ERR_CRAWL_TIMEOUT
+
+    mock_msg = MagicMock()
+    mock_msg.body = b'{"type": "web", "url": "http://fail.com", "id": "1"}'
+    mock_msg.attempts = 1
+
+    # Simulate ERR_CRAWL_TIMEOUT from handle_web_task
+    crawl_err = IngestionError(ERR_CRAWL_TIMEOUT, "net::ERR_TIMED_OUT")
+
+    with (
+        patch("main.handle_web_task", side_effect=crawl_err),
+        patch("main.settings") as mock_settings,
+    ):
+        mock_settings.retry_max_attempts = 3
+        mock_settings.retry_initial_delay_ms = 1000
+        mock_settings.retry_max_delay_ms = 60000
+        mock_settings.retry_backoff_multiplier = 2
+
+        with (
+            patch("main.producer"),
+            patch("main.WORKER_SEMAPHORE", asyncio.Semaphore(1)),
+        ):
+            await process_message(mock_msg)
+
+            # Should requeue with backoff, NOT finish
+            mock_msg.finish.assert_not_called()
+            mock_msg.requeue.assert_called()
+
+            args, kwargs = mock_msg.requeue.call_args
+            delay = kwargs.get("delay")
+            if delay is None and args:
+                delay = args[0]
+            assert delay == 1000
