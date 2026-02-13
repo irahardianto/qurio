@@ -1,12 +1,16 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 )
+
+var ErrMissingRequired = errors.New("missing required configuration")
 
 type Config struct {
 	DBHost string `envconfig:"DB_HOST" default:"postgres"`
@@ -30,6 +34,12 @@ type Config struct {
 	RerankAPIKey         string `envconfig:"RERANK_API_KEY"`
 	NSQMaxMsgSize        int64  `envconfig:"NSQ_MAX_MSG_SIZE" default:"10485760"` // 10MB
 
+	// Server
+	ServerPort      int    `envconfig:"SERVER_PORT" default:"8081"`
+	QueryLogPath    string `envconfig:"QUERY_LOG_PATH" default:"data/logs/query.log"`
+	MaxUploadSizeMB int64  `envconfig:"MAX_UPLOAD_SIZE_MB" default:"50"`
+	UploadDir       string `envconfig:"QURIO_UPLOAD_DIR" default:"./uploads"`
+
 	// Resilience
 	BootstrapRetryAttempts     int `envconfig:"BOOTSTRAP_RETRY_ATTEMPTS" default:"10"`
 	BootstrapRetryDelaySeconds int `envconfig:"BOOTSTRAP_RETRY_DELAY_SECONDS" default:"2"`
@@ -47,5 +57,26 @@ func Load() (*Config, error) {
 
 	var cfg Config
 	err := envconfig.Process("", &cfg)
-	return &cfg, err
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+func (c *Config) Validate() error {
+	if c.DBHost == "" {
+		return fmt.Errorf("%w: DB_HOST", ErrMissingRequired)
+	}
+	if c.DBUser == "" {
+		return fmt.Errorf("%w: DB_USER", ErrMissingRequired)
+	}
+	if c.DBName == "" {
+		return fmt.Errorf("%w: DB_NAME", ErrMissingRequired)
+	}
+	return nil
 }

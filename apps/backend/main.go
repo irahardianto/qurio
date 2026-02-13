@@ -55,7 +55,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	// 4. Worker (Result Consumer) Setup
 	nsqCfg := nsq.NewConfig()
 	// nsqCfg.MaxMsgSize = cfg.NSQMaxMsgSize // Field undefined in go-nsq v1.1.0
-	consumer, err := nsq.NewConsumer("ingest.result", "backend", nsqCfg)
+	consumer, err := nsq.NewConsumer(config.TopicIngestResult, "backend", nsqCfg)
 	if err != nil {
 		slog.Error("failed to create NSQ consumer for results", "error", err)
 	} else {

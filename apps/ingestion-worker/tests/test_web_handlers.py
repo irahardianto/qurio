@@ -280,3 +280,298 @@ async def test_handle_web_task_permanent_error_no_retry():
         # No retries — should only crawl once
         assert mock_crawler.arun.call_count == 1
         mock_sleep.assert_not_called()
+
+
+# --- Additional Edge Cases and Happy Path Tests ---
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_llms_txt_bypass():
+    """Verify that llms.txt files bypass LLM filtering."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Documentation\nSome content"
+    mock_result.url = "http://example.com/llms.txt"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch("handlers.web.DefaultMarkdownGenerator") as MockMdGen:
+        with patch("handlers.web.LLMContentFilter") as MockLLMFilter:
+            await handle_web_task("http://example.com/llms.txt", crawler=mock_crawler)
+
+            # DefaultMarkdownGenerator should be called without LLM filter
+            MockMdGen.assert_called_once()
+            # LLMContentFilter should NOT be instantiated
+            MockLLMFilter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_txt_file_bypass():
+    """Verify that .txt files bypass LLM filtering."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Plain text content"
+    mock_result.url = "http://example.com/readme.txt"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    with patch("handlers.web.DefaultMarkdownGenerator") as MockMdGen:
+        with patch("handlers.web.LLMContentFilter") as MockLLMFilter:
+            await handle_web_task("http://example.com/readme.txt", crawler=mock_crawler)
+
+            MockMdGen.assert_called_once()
+            MockLLMFilter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_no_title():
+    """Test metadata extraction when no title is found."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content without heading"
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/page", crawler=mock_crawler)
+
+    assert result[0]["title"] == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_no_links():
+    """Test handling when no links are found."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Page\nContent"
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {}  # No links
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/page", crawler=mock_crawler)
+
+    assert result[0]["links"] == []
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_link_deduplication():
+    """Test that duplicate links are removed."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Page\nContent"
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {
+        "internal": [
+            {"href": "http://example.com/page1"},
+            {"href": "http://example.com/page1"},  # Duplicate
+            {"href": "http://example.com/page2"},
+        ]
+    }
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/page", crawler=mock_crawler)
+
+    links = result[0]["links"]
+    assert len(links) == 2
+    assert "http://example.com/page1" in links
+    assert "http://example.com/page2" in links
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_relative_url_resolution():
+    """Test that relative URLs in markdown are resolved correctly."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    # Markdown with relative link
+    mock_result.markdown = "# Page\n[Link](/docs/api)"
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/page", crawler=mock_crawler)
+
+    links = result[0]["links"]
+    assert "http://example.com/docs/api" in links
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_external_links_filtered():
+    """Test that external links from markdown are filtered out."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = (
+        "# Page\n[External](http://other.com/page)\n[Internal](/docs)"
+    )
+    mock_result.url = "http://example.com/page"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/page", crawler=mock_crawler)
+
+    links = result[0]["links"]
+    assert "http://other.com/page" not in links
+    assert "http://example.com/docs" in links
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_path_extraction():
+    """Test that URL path is correctly extracted."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Page"
+    mock_result.url = "http://example.com/docs/api/v1/users"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task(
+        "http://example.com/docs/api/v1/users", crawler=mock_crawler
+    )
+
+    assert result[0]["path"] == "docs > api > v1 > users"
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_empty_markdown():
+    """Test handling of empty markdown content."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = ""
+    mock_result.url = "http://example.com/empty"
+    mock_result.links = {"internal": []}
+
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
+
+    result = await handle_web_task("http://example.com/empty", crawler=mock_crawler)
+
+    assert result[0]["content"] == ""
+    assert result[0]["title"] == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_without_crawler_instance():
+    """Test that handle_web_task creates its own crawler when none is provided."""
+    from handlers.web import handle_web_task
+
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "# Test"
+    mock_result.url = "http://example.com"
+    mock_result.links = {"internal": []}
+
+    mock_crawler_instance = AsyncMock()
+    mock_crawler_instance.arun.return_value = mock_result
+    mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
+    mock_crawler_instance.__aexit__.return_value = None
+
+    with patch("handlers.web.default_crawler_factory") as mock_factory:
+        mock_factory.return_value = mock_crawler_instance
+
+        result = await handle_web_task("http://example.com", crawler=None)
+
+        # Should create new crawler
+        mock_factory.assert_called_once()
+        assert result[0]["content"] == "# Test"
+
+
+@pytest.mark.asyncio
+async def test_handle_web_task_retry_success_on_second_attempt():
+    """Test that retry succeeds on second attempt after transient error."""
+    from handlers.web import handle_web_task
+
+    mock_crawler = AsyncMock()
+
+    # First call fails with timeout, second succeeds
+    call_count = 0
+
+    async def side_effect(url, config):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            result = MagicMock()
+            result.success = False
+            result.error_message = "net::ERR_TIMED_OUT"
+            return result
+        else:
+            result = MagicMock()
+            result.success = True
+            result.markdown = "# Success"
+            result.url = url
+            result.links = {"internal": []}
+            return result
+
+    mock_crawler.arun.side_effect = side_effect
+
+    with patch("handlers.web.asyncio.sleep", new_callable=AsyncMock):
+        result = await handle_web_task("http://example.com", crawler=mock_crawler)
+
+        assert result[0]["content"] == "# Success"
+        assert mock_crawler.arun.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_classify_crawl_error_connection_reset():
+    """Test classification of connection reset errors."""
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_REFUSED
+
+    err = _classify_crawl_error(
+        "Page.goto: net::ERR_CONNECTION_RESET at https://example.com"
+    )
+    assert err.code == ERR_CRAWL_REFUSED
+
+
+@pytest.mark.asyncio
+async def test_classify_crawl_error_connection_closed():
+    """Test classification of connection closed errors."""
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_REFUSED
+
+    err = _classify_crawl_error(
+        "Page.goto: net::ERR_CONNECTION_CLOSED at https://example.com"
+    )
+    assert err.code == ERR_CRAWL_REFUSED
+
+
+@pytest.mark.asyncio
+async def test_classify_crawl_error_forbidden():
+    """Test classification of forbidden errors."""
+    from handlers.web import _classify_crawl_error
+    from exceptions import ERR_CRAWL_BLOCKED
+
+    err = _classify_crawl_error("403 Forbidden")
+    assert err.code == ERR_CRAWL_BLOCKED

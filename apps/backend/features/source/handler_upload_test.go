@@ -15,7 +15,7 @@ func TestUpload_MissingName(t *testing.T) {
 	// Setup Service with Mocks
 	mockRepo := new(MockRepo)
 	svc := source.NewService(mockRepo, nil, nil, nil)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	// Multipart Request without name
 	body := &bytes.Buffer{}

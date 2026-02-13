@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -20,11 +21,13 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service         *Service
+	uploadDir       string
+	maxUploadSizeMB int64
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, uploadDir string, maxUploadSizeMB int64) *Handler {
+	return &Handler{service: service, uploadDir: uploadDir, maxUploadSizeMB: maxUploadSizeMB}
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +61,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Name:       req.Name,
 	}
 	if err := h.service.Create(r.Context(), src); err != nil {
-		if err.Error() == "Duplicate detected" {
+		if err.Error() == "duplicate detected" {
 			h.writeError(r.Context(), w, "CONFLICT", err.Error(), http.StatusConflict)
 			return
 		}
@@ -75,11 +78,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
-	// 50 MB limit (enforced at reader level)
-	r.Body = http.MaxBytesReader(w, r.Body, 50<<20)
+	maxBytes := h.maxUploadSizeMB << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 
-	// 50 MB limit (memory)
-	if err := r.ParseMultipartForm(50 << 20); err != nil {
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
 		h.writeError(r.Context(), w, "BAD_REQUEST", "File too large", http.StatusBadRequest)
 		return
 	}
@@ -108,12 +110,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create uploads directory if not exists
-	uploadDir := os.Getenv("QURIO_UPLOAD_DIR")
-	if uploadDir == "" {
-		uploadDir = "./uploads"
-	}
+	uploadDir := h.uploadDir
 	if err := os.MkdirAll(uploadDir, 0o750); err != nil { // #nosec G703 -- uploadDir from env or hardcoded default, not user-controlled
-		slog.Error("failed to create upload directory", "error", err, "path", filepath.Clean(uploadDir))
+
+		cleanDir := strings.ReplaceAll(filepath.Clean(uploadDir), "\n", "")
+		slog.Error("failed to create upload directory", "error", err, "path", cleanDir)
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to create upload directory", http.StatusInternalServerError)
 		return
 	}
@@ -125,7 +126,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Create file
 	dst, err := os.Create(path) // #nosec G304 G703 -- path is constructed from UUID + sanitized basename, not user-controlled
 	if err != nil {
-		slog.Error("failed to create file", "error", err, "path", path) // #nosec G706 -- path is UUID-based, not raw user input
+		slog.Error("failed to create file", "error", err, "path", strings.ReplaceAll(path, "\n", "")) // #nosec G706 -- path sanitized
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", "Failed to save file", http.StatusInternalServerError)
 		return
 	}
@@ -147,10 +148,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Clean up file if duplicate or error
 		if removeErr := os.Remove(path); removeErr != nil { // #nosec G703 -- path is UUID-based, not raw user input
-			slog.Warn("failed to clean up uploaded file", "error", removeErr, "path", filepath.Clean(path))
+			cleanPath := strings.ReplaceAll(filepath.Clean(path), "\n", "")
+			slog.Warn("failed to clean up uploaded file", "error", removeErr, "path", cleanPath) // #nosec G706
 		}
 
-		if err.Error() == "Duplicate detected" {
+		if err.Error() == "duplicate detected" {
 			h.writeError(r.Context(), w, "CONFLICT", err.Error(), http.StatusConflict)
 			return
 		}

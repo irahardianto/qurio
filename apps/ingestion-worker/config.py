@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     nsqd_tcp_address: str = "nsqd:4150"
     gemini_api_key: str = ""  # Env: GEMINI_API_KEY
     nsq_max_in_flight: int = 8  # Env: NSQ_MAX_IN_FLIGHT
+    nsq_heartbeat_interval: int = 60  # Env: NSQ_HEARTBEAT_INTERVAL
     crawler_page_timeout: int = 120000  # Env: CRAWLER_PAGE_TIMEOUT
+    env: str = "production"  # Env: ENV
 
     # Retry Logic
     retry_max_attempts: int = 3

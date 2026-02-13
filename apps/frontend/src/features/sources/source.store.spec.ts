@@ -132,7 +132,9 @@ describe("Source Store", () => {
       json: async () => ({ error: { message: "File too large" } }),
     });
 
-    await expect(store.uploadSource(file, "test.pdf")).rejects.toThrow("File too large");
+    await expect(store.uploadSource(file, "test.pdf")).rejects.toThrow(
+      "File too large",
+    );
     expect(store.error).toBe("File too large");
   });
 

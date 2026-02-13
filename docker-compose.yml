@@ -1,7 +1,8 @@
 services:
   weaviate:
-    image: semitechnologies/weaviate:latest
-    ports: ["8080:8080"]
+    image: semitechnologies/weaviate:1.28.4
+    restart: unless-stopped
+    ports: [ "8080:8080" ]
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
@@ -9,60 +10,77 @@ services:
       DEFAULT_VECTORIZER_MODULE: 'none'
       CLUSTER_HOSTNAME: 'node1'
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/v1/meta"]
+      test: [ "CMD", "wget", "-q", "-O", "-", "http://localhost:8080/v1/meta" ]
       interval: 5s
       timeout: 10s
       retries: 5
       start_period: 10s
-  
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+
   postgres:
     image: postgres:16-alpine
-    ports: ["5432:5432"]
+    restart: unless-stopped
+    ports: [ "${DOCKER_DB_PORT:-5432}:5432" ]
     environment:
       POSTGRES_USER: ${DB_USER:-qurio}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
       POSTGRES_DB: ${DB_NAME:-qurio}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-qurio}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-qurio}" ]
       interval: 5s
       timeout: 5s
       retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   nsqlookupd:
     image: nsqio/nsq:v1.3.0
+    restart: unless-stopped
     command: /nsqlookupd
     ports:
       - "4160:4160"
       - "4161:4161"
-  
-  nsqd:
-    image: nsqio/nsq:v1.3.0
-    # Use wget instead of curl in the healthcheck as the image might not have curl
-    # The image is nsqio/nsq based on Alpine, it usually has wget
-    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd --max-msg-size=${NSQ_MAX_MSG_SIZE:-10485760}
-    depends_on: [nsqlookupd]
-    ports:
-      - "4150:4150"
-      - "4151:4151"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4151/ping"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4161/ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  nsqd:
+    image: nsqio/nsq:v1.3.0
+    restart: unless-stopped
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd --max-msg-size=${NSQ_MAX_MSG_SIZE:-10485760} --data-path=/data
+    depends_on:
+      nsqlookupd:
+        condition: service_healthy
+    ports:
+      - "4150:4150"
+      - "4151:4151"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4151/ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - nsqd_data:/data
+
   ingestion-worker-web:
     build: ./apps/ingestion-worker
+    restart: unless-stopped
     depends_on:
       nsqd:
         condition: service_healthy
     environment:
-      # Use DOCKER_ prefix to avoid collision with local .env variables
       - NSQ_TOPIC_INGEST=ingest.task.web
       - NSQ_LOOKUPD_HTTP=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
       - NSQD_TCP_ADDRESS=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
       - NSQ_MAX_IN_FLIGHT=${NSQ_MAX_IN_FLIGHT:-8}
+      - NSQ_HEARTBEAT_INTERVAL=${NSQ_HEARTBEAT_INTERVAL:-60}
       - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CRAWLER_PAGE_TIMEOUT=${CRAWLER_PAGE_TIMEOUT:-120000}
+      - ENV=${ENV:-production}
       - RETRY_MAX_ATTEMPTS=${RETRY_MAX_ATTEMPTS:-3}
       - RETRY_INITIAL_DELAY_MS=${RETRY_INITIAL_DELAY_MS:-1000}
       - RETRY_MAX_DELAY_MS=${RETRY_MAX_DELAY_MS:-60000}
@@ -78,17 +96,20 @@ services:
 
   ingestion-worker-file:
     build: ./apps/ingestion-worker
+    restart: unless-stopped
     depends_on:
       nsqd:
         condition: service_healthy
     environment:
-      # Use DOCKER_ prefix to avoid collision with local .env variables
       - NSQ_TOPIC_INGEST=ingest.task.file
       - NSQ_LOOKUPD_HTTP=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
       - NSQD_TCP_ADDRESS=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
       - NSQ_MAX_IN_FLIGHT=${NSQ_MAX_IN_FLIGHT:-8}
+      - NSQ_HEARTBEAT_INTERVAL=${NSQ_HEARTBEAT_INTERVAL:-60}
       - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CRAWLER_PAGE_TIMEOUT=${CRAWLER_PAGE_TIMEOUT:-120000}
+      - ENV=${ENV:-production}
       - RETRY_MAX_ATTEMPTS=${RETRY_MAX_ATTEMPTS:-3}
       - RETRY_INITIAL_DELAY_MS=${RETRY_INITIAL_DELAY_MS:-1000}
       - RETRY_MAX_DELAY_MS=${RETRY_MAX_DELAY_MS:-60000}
@@ -101,10 +122,11 @@ services:
           memory: 8G
     volumes:
       - qurio_uploads:/var/lib/qurio/uploads
-  
+
   backend:
     build: ./apps/backend
-    ports: ["8081:8081"]
+    restart: unless-stopped
+    ports: [ "${SERVER_PORT:-8081}:${SERVER_PORT:-8081}" ]
     environment:
       - ENABLE_API=true
       - ENABLE_EMBEDDER_WORKER=false
@@ -123,6 +145,10 @@ services:
       - MIGRATION_PATH=${MIGRATION_PATH:-file://migrations}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - RERANK_API_KEY=${RERANK_API_KEY}
+      - SERVER_PORT=${SERVER_PORT:-8081}
+      - QUERY_LOG_PATH=${QUERY_LOG_PATH:-data/logs/query.log}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
+      - ENV=${ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,6 +161,7 @@ services:
 
   backend-worker:
     build: ./apps/backend
+    restart: unless-stopped
     deploy:
       replicas: ${BACKEND_WORKER_REPLICAS:-1}
     environment:
@@ -155,6 +182,10 @@ services:
       - MIGRATION_PATH=${MIGRATION_PATH:-file://migrations}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - RERANK_API_KEY=${RERANK_API_KEY}
+      - SERVER_PORT=${SERVER_PORT:-8081}
+      - QUERY_LOG_PATH=${QUERY_LOG_PATH:-data/logs/query.log}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
+      - ENV=${ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,9 +198,16 @@ services:
 
   frontend:
     build: ./apps/frontend
-    ports: ["3000:8080"]
-    depends_on: [backend]
+    restart: unless-stopped
+    ports: [ "3000:8080" ]
+    depends_on: [ backend ]
 
 volumes:
+  weaviate_data:
+    name: qurio_weaviate_data
+  postgres_data:
+    name: qurio_postgres_data
+  nsqd_data:
+    name: qurio_nsqd_data
   qurio_uploads:
     name: qurio_uploads

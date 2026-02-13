@@ -7,16 +7,20 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/settings"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type MockEmbedder struct{ mock.Mock }
 
 func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	args := m.Called(ctx, text)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]float32), args.Error(1)
 }
 
@@ -32,6 +36,9 @@ func (m *MockStore) Search(ctx context.Context, query string, vector []float32, 
 
 func (m *MockStore) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {
 	args := m.Called(ctx, url)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]retrieval.SearchResult), args.Error(1)
 }
 
@@ -312,5 +319,23 @@ func TestGetChunksByURL(t *testing.T) {
 	assert.Len(t, results, 2)
 	assert.Equal(t, "chunk1", results[0].Content)
 	assert.Equal(t, "T", results[0].Title) // Verify title population
+	s.AssertExpectations(t)
+}
+
+func TestGetChunksByURL_Error(t *testing.T) {
+	e := new(MockEmbedder)
+	s := new(MockStore)
+	repo := new(MockSettingsRepo)
+	setSvc := settings.NewService(repo)
+
+	svc := retrieval.NewService(e, s, nil, setSvc, nil)
+	ctx := context.Background()
+	url := "http://example.com"
+
+	s.On("GetChunksByURL", ctx, url).Return(nil, errors.New("store error"))
+
+	_, err := svc.GetChunksByURL(ctx, url)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "store error")
 	s.AssertExpectations(t)
 }

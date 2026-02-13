@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 )
 
 type App struct {
+	cfg              *config.Config
 	Handler          http.Handler
 	SourceService    *source.Service
 	ResultConsumer   *worker.ResultConsumer
@@ -96,7 +98,12 @@ func New(
 	// Feature: Source
 	sourceRepo := source.NewPostgresRepo(sqlDB)
 	sourceService := source.NewService(sourceRepo, taskPub, vecStore, settingsService)
-	sourceHandler := source.NewHandler(sourceService)
+
+	uploadDir := cfg.UploadDir
+	if uploadDir == "" {
+		uploadDir = "./uploads"
+	}
+	sourceHandler := source.NewHandler(sourceService, uploadDir, cfg.MaxUploadSizeMB)
 
 	// Feature: Job
 	jobRepo := job.NewPostgresRepo(sqlDB)
@@ -156,7 +163,7 @@ func New(
 	mux.Handle("GET /stats", middleware.CorrelationID(enableCORS(statsHandler.GetStats)))
 
 	// Feature: Retrieval & MCP
-	queryLogger, err := retrieval.NewFileQueryLogger("data/logs/query.log")
+	queryLogger, err := retrieval.NewFileQueryLogger(cfg.QueryLogPath)
 	if err != nil {
 		slog.Warn("failed to create query logger, falling back to stdout", "error", err)
 		queryLogger = retrieval.NewQueryLogger(os.Stdout)
@@ -188,6 +195,7 @@ func New(
 	}
 
 	return &App{
+		cfg:              cfg,
 		Handler:          mux,
 		SourceService:    sourceService,
 		ResultConsumer:   resultConsumer,
@@ -196,8 +204,9 @@ func New(
 }
 
 func (a *App) Run(ctx context.Context) error {
+	addr := fmt.Sprintf(":%d", a.cfg.ServerPort)
 	srv := &http.Server{
-		Addr:              ":8081",
+		Addr:              addr,
 		Handler:           a.Handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -210,7 +219,7 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}()
 
-	slog.Info("server starting", "port", 8081)
+	slog.Info("server starting", "port", a.cfg.ServerPort)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		return err
 	}

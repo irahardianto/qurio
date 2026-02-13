@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from unittest.mock import MagicMock
 from tornado.iostream import StreamClosedError
-import nsq
+import nsq  # type: ignore
 
 
 # This is the logic we WANT to implement in main.py

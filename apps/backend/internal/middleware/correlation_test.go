@@ -62,10 +62,13 @@ func TestCorrelationID_Middleware(t *testing.T) {
 }
 
 func TestGetCorrelationID_Extraction(t *testing.T) {
-	// Simple unit test for helper not covered by middleware flow directly (e.g. empty context)
-	// Although middleware test covers the happy path.
-	// This ensures GetCorrelationID behaves safely on empty context.
-	// Note: The current implementation returns "unknown" for missing ID.
-	// The new requirement might imply it returns "" or handle it.
-	// We will stick to the behavior verified by the middleware test for now.
+	// Test extraction from empty context
+	req := httptest.NewRequest("GET", "/", nil)
+	id := GetCorrelationID(req.Context())
+	assert.Equal(t, "unknown", id)
+
+	// Test extraction from context with ID
+	ctx := WithCorrelationID(req.Context(), "test-id")
+	id = GetCorrelationID(ctx)
+	assert.Equal(t, "test-id", id)
 }

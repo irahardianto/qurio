@@ -107,7 +107,7 @@ describe("SourceForm", () => {
     const store = useSourceStore();
     const settingsStore = useSettingsStore();
     settingsStore.geminiApiKey = "test-key";
-    const alertMock = vi.spyOn(window, "alert").mockImplementation(() => { });
+    const alertMock = vi.spyOn(window, "alert").mockImplementation(() => {});
 
     const nameInput = wrapper.find(
       'input[placeholder="e.g., Company Documentation"]',

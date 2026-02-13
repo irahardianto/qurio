@@ -156,7 +156,7 @@ export const useSourceStore = defineStore("sources", () => {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(
           errorData.error?.message ||
-          `Failed to upload source: ${res.statusText}`,
+            `Failed to upload source: ${res.statusText}`,
         );
       }
       const json = await res.json();
@@ -230,7 +230,6 @@ export const useSourceStore = defineStore("sources", () => {
       const json = await res.json();
       return json.data as SourcePage[];
     } catch (e: unknown) {
-
       console.error("Failed to fetch source pages", e);
       return [];
     }

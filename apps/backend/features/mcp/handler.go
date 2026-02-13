@@ -95,9 +95,9 @@ const (
 	ErrInternal       = -32603
 )
 
-// processRequest processes the JSON-RPC request and returns a response.
+// ProcessRequest processes the JSON-RPC request and returns a response.
 // Returns nil if no response should be sent (e.g. for notifications).
-func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONRPCResponse {
+func (h *Handler) ProcessRequest(ctx context.Context, req JSONRPCRequest) *JSONRPCResponse {
 	if req.Method == "initialize" {
 		return &JSONRPCResponse{
 			JSONRPC: "2.0",
@@ -579,7 +579,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := h.processRequest(r.Context(), req)
+	resp := h.ProcessRequest(r.Context(), req)
 	if resp != nil {
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			slog.Error("mcp encode error", "error", err)

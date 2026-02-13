@@ -9,10 +9,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/testutils"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandler_Upload_Integration(t *testing.T) {
@@ -31,7 +32,7 @@ func TestHandler_Upload_Integration(t *testing.T) {
 	// Dependencies
 	repo := source.NewPostgresRepo(s.DB)
 	service := source.NewService(repo, s.NSQ, nil, nil) // ChunkStore and Settings not needed for Upload
-	h := source.NewHandler(service)
+	h := source.NewHandler(service, tmpDir, 50)
 
 	// Prepare File Upload
 	body := &bytes.Buffer{}

@@ -1,7 +1,8 @@
 import structlog
 import logging
 import sys
-import os
+
+from config import settings
 
 
 def configure_logger():
@@ -10,7 +11,7 @@ def configure_logger():
     Outputs JSON in production, and ConsoleRenderer in development.
     """
 
-    env = os.environ.get("ENV", "production")
+    env = settings.env
 
     shared_processors = [
         structlog.contextvars.merge_contextvars,

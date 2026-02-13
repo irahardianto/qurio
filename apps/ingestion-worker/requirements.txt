@@ -12,3 +12,4 @@ tornado
 structlog
 colorama
 httpx
+testcontainers

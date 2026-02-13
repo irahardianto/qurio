@@ -108,7 +108,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		return err
 	}
 	if exists {
-		return fmt.Errorf("Duplicate detected")
+		return fmt.Errorf("duplicate detected")
 	}
 
 	// 2. Set Status to in_progress (queued) and Save
@@ -171,7 +171,7 @@ func (s *Service) Upload(ctx context.Context, path string, hash string, name str
 		return nil, err
 	}
 	if exists {
-		return nil, fmt.Errorf("Duplicate detected")
+		return nil, fmt.Errorf("duplicate detected")
 	}
 
 	src := &Source{

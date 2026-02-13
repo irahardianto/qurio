@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 const props = withDefaults(
   defineProps<DialogContentProps & { class?: string }>(),
   {
-
     class: undefined,
   },
 );

@@ -96,7 +96,7 @@ async function submit() {
         validationError.value = "Source Name is required";
         return;
       }
-       
+
       const filePayload = file.value as any;
       await store.uploadSource(filePayload, name.value);
       if (!store.error) {

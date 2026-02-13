@@ -16,7 +16,7 @@ func TestCreateSource_MissingName(t *testing.T) {
 	mockPub := new(MockPublisher)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, mockPub, nil, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	// Missing Name
 	body := []byte(`{"url":"https://example.com","type":"web"}`)

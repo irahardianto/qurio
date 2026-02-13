@@ -324,7 +324,7 @@ def main():
         topic=settings.nsq_topic_ingest,
         channel=settings.nsq_channel_worker,
         max_in_flight=settings.nsq_max_in_flight,
-        heartbeat_interval=60,
+        heartbeat_interval=settings.nsq_heartbeat_interval,
     )
 
     # Create Producer (Writer)

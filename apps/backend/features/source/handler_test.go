@@ -13,12 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 // MockRepo implements source.Repository
@@ -157,7 +158,7 @@ func TestHandler_Create(t *testing.T) {
 		mockPub := new(MockPublisher)
 		mockSettings := new(MockSettingsService)
 		svc := source.NewService(mockRepo, mockPub, nil, mockSettings)
-		handler := source.NewHandler(svc)
+		handler := source.NewHandler(svc, t.TempDir(), 50)
 
 		mockRepo.On("ExistsByHash", mock.Anything, mock.Anything).Return(false, nil)
 		mockRepo.On("Save", mock.Anything, mock.Anything).Return(nil)
@@ -179,7 +180,7 @@ func TestHandler_Create(t *testing.T) {
 		mockPub := new(MockPublisher)
 		mockSettings := new(MockSettingsService)
 		svc := source.NewService(mockRepo, mockPub, nil, mockSettings)
-		handler := source.NewHandler(svc)
+		handler := source.NewHandler(svc, t.TempDir(), 50)
 
 		mockRepo.On("ExistsByHash", mock.Anything, mock.Anything).Return(true, nil)
 
@@ -197,7 +198,7 @@ func TestHandler_Create(t *testing.T) {
 		mockPub := new(MockPublisher)
 		mockSettings := new(MockSettingsService)
 		svc := source.NewService(mockRepo, mockPub, nil, mockSettings)
-		handler := source.NewHandler(svc)
+		handler := source.NewHandler(svc, t.TempDir(), 50)
 
 		// Missing URL
 		reqBody := `{"type": "web", "url": ""}`
@@ -215,7 +216,7 @@ func TestHandler_Upload(t *testing.T) {
 	// We'll focus on testing the Handler validation logic here.
 	mockRepo := new(MockRepo)
 	svc := source.NewService(mockRepo, nil, nil, nil)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	t.Run("Invalid File Type", func(t *testing.T) {
 		body := &bytes.Buffer{}
@@ -244,7 +245,7 @@ func TestHandler_ReSync(t *testing.T) {
 	mockPub := new(MockPublisher)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, mockPub, nil, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	t.Run("Success", func(t *testing.T) {
 		mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1", Type: "web", URL: "http://example.com"}, nil)
@@ -267,7 +268,7 @@ func TestHandler_ReSync(t *testing.T) {
 func TestHandler_List(t *testing.T) {
 	mockRepo := new(MockRepo)
 	svc := source.NewService(mockRepo, nil, nil, nil) // nil nsq, nil vector, nil settings
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("List", mock.Anything).Return([]source.Source{{ID: "1"}}, nil)
 
@@ -285,7 +286,7 @@ func TestHandler_Delete(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("SoftDelete", mock.Anything, "1").Return(nil)
 	mockChunkStore.On("DeleteChunksBySourceID", mock.Anything, "1").Return(nil)
@@ -303,7 +304,7 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockChunkStore.On("DeleteChunksBySourceID", mock.Anything, "99").Return(nil)
 	mockRepo.On("SoftDelete", mock.Anything, "99").Return(sql.ErrNoRows)
@@ -321,7 +322,7 @@ func TestHandler_Get(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1"}, nil)
 	mockChunkStore.On("CountChunksBySource", mock.Anything, "1").Return(10, nil)
@@ -340,7 +341,7 @@ func TestHandler_Get_Pagination(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1"}, nil)
 	mockChunkStore.On("CountChunksBySource", mock.Anything, "1").Return(200, nil)
@@ -359,7 +360,7 @@ func TestHandler_Get_ExcludeChunks(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1"}, nil)
 	mockChunkStore.On("CountChunksBySource", mock.Anything, "1").Return(200, nil)
@@ -379,7 +380,7 @@ func TestHandler_Get_NotFound(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("Get", mock.Anything, "99").Return(nil, sql.ErrNoRows)
 
@@ -396,7 +397,7 @@ func TestHandler_GetPages(t *testing.T) {
 	mockChunkStore := new(MockChunkStore)
 	mockSettings := new(MockSettingsService)
 	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, t.TempDir(), 50)
 
 	mockRepo.On("GetPages", mock.Anything, "1").Return([]source.SourcePage{}, nil)
 
@@ -409,21 +410,14 @@ func TestHandler_GetPages(t *testing.T) {
 }
 
 func TestHandler_Upload_DefaultDirectory(t *testing.T) {
-	// Ensure environment variable is unset to trigger fallback
-	oldEnv := os.Getenv("QURIO_UPLOAD_DIR")
-	os.Unsetenv("QURIO_UPLOAD_DIR")
-	defer func() {
-		if oldEnv != "" {
-			os.Setenv("QURIO_UPLOAD_DIR", oldEnv)
-		}
-	}()
+	uploadDir := t.TempDir()
 
 	// Mock Dependencies
 	mockRepo := new(MockRepo)
 	mockPub := new(MockPublisher)
 	// Service needs repo and publisher (mocked)
 	svc := source.NewService(mockRepo, mockPub, nil, nil)
-	handler := source.NewHandler(svc)
+	handler := source.NewHandler(svc, uploadDir, 50)
 
 	// Mock Expectations
 	mockRepo.On("ExistsByHash", mock.Anything, mock.Anything).Return(false, nil)
@@ -451,11 +445,8 @@ func TestHandler_Upload_DefaultDirectory(t *testing.T) {
 		t.Logf("Response: %s", w.Body.String())
 	}
 
-	// Verify ./uploads directory was created and contains file
-	entries, err := os.ReadDir("./uploads")
+	// Verify upload directory contains the file
+	entries, err := os.ReadDir(uploadDir)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, entries)
-
-	// Cleanup
-	os.RemoveAll("./uploads")
 }

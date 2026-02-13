@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 // --- Mocks ---
@@ -183,7 +184,7 @@ func TestService_Create_Duplicate(t *testing.T) {
 
 	err := svc.Create(context.Background(), src)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Duplicate")
+	assert.Contains(t, err.Error(), "duplicate detected")
 }
 
 func TestService_Delete(t *testing.T) {
@@ -315,7 +316,7 @@ func TestService_Upload_Duplicate(t *testing.T) {
 
 	_, err := svc.Upload(context.Background(), "path", "hash", "name")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Duplicate")
+	assert.Contains(t, err.Error(), "duplicate detected")
 }
 
 func TestService_List(t *testing.T) {
