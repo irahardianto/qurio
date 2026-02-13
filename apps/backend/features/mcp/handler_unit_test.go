@@ -676,6 +676,11 @@ func TestProcessRequest_QuriReadPage_Success(t *testing.T) {
 	assert.Contains(t, result.Content[0].Text, "Page Title")
 	assert.Contains(t, result.Content[0].Text, "Page content")
 	assert.Contains(t, result.Content[0].Text, "func main()")
+	// Verify prose is wrapped in code fences
+	assert.Contains(t, result.Content[0].Text, "```\nPage content\n```")
+	// Verify code block uses non-link format
+	assert.Contains(t, result.Content[0].Text, "--- Code (go) ---")
+	assert.NotContains(t, result.Content[0].Text, "[Code Block")
 
 	mockRetriever.AssertExpectations(t)
 }
@@ -827,4 +832,87 @@ func TestProcessRequest_InvalidJSONRPCMethod(t *testing.T) {
 
 	errMap := resp.Error.(map[string]interface{})
 	assert.Equal(t, mcp.ErrMethodNotFound, errMap["code"])
+}
+
+func TestProcessRequest_QuriSearch_ContentWithURLs(t *testing.T) {
+	mockRetriever := new(MockRetriever)
+	mockSourceMgr := new(MockSourceManager)
+	handler := mcp.NewHandler(mockRetriever, mockSourceMgr)
+
+	// Simulate content that contains markdown links and URIs (typical crawled docs)
+	contentWithURLs := "See the [Docker Compose docs](https://docs.docker.com/compose/) for more.\nUse grpc://localhost:50051 for gRPC connections."
+
+	searchResults := []retrieval.SearchResult{
+		{
+			Content:  contentWithURLs,
+			Title:    "Docker Guide",
+			Score:    0.85,
+			Type:     "prose",
+			SourceID: "src1",
+		},
+	}
+
+	mockRetriever.On("Search", mock.Anything, "docker compose", mock.Anything).Return(searchResults, nil)
+
+	args := map[string]interface{}{"query": "docker compose"}
+	argsJSON, _ := json.Marshal(args)
+
+	params := mcp.CallParams{Name: "qurio_search", Arguments: argsJSON}
+	paramsJSON, _ := json.Marshal(params)
+
+	req := mcp.JSONRPCRequest{JSONRPC: "2.0", Method: "tools/call", Params: paramsJSON, ID: 30}
+	resp := handler.ProcessRequest(context.Background(), req)
+
+	assert.NotNil(t, resp)
+	assert.Nil(t, resp.Error)
+
+	result := resp.Result.(mcp.ToolResult)
+	assert.False(t, result.IsError)
+	// Content should be wrapped in code fences
+	assert.Contains(t, result.Content[0].Text, "Content:\n```\n")
+	assert.Contains(t, result.Content[0].Text, "\n```\n")
+	// The raw content should still be present inside the fences
+	assert.Contains(t, result.Content[0].Text, contentWithURLs)
+
+	mockRetriever.AssertExpectations(t)
+}
+
+func TestProcessRequest_QuriReadPage_ContentWithURLs(t *testing.T) {
+	mockRetriever := new(MockRetriever)
+	mockSourceMgr := new(MockSourceManager)
+	handler := mcp.NewHandler(mockRetriever, mockSourceMgr)
+
+	proseWithURLs := "Navigate to [Settings](https://example.com/settings) page.\nSee also: javascript:void(0) and data:text/html patterns."
+
+	chunks := []retrieval.SearchResult{
+		{Content: proseWithURLs, Title: "Settings Guide", Type: "prose"},
+		{Content: "import \"net/http\"", Language: "go", Type: "code"},
+	}
+	mockRetriever.On("GetChunksByURL", mock.Anything, "https://example.com/docs").Return(chunks, nil)
+
+	args := map[string]interface{}{"url": "https://example.com/docs"}
+	argsJSON, _ := json.Marshal(args)
+
+	params := mcp.CallParams{Name: "qurio_read_page", Arguments: argsJSON}
+	paramsJSON, _ := json.Marshal(params)
+
+	req := mcp.JSONRPCRequest{JSONRPC: "2.0", Method: "tools/call", Params: paramsJSON, ID: 31}
+	resp := handler.ProcessRequest(context.Background(), req)
+
+	assert.NotNil(t, resp)
+	assert.Nil(t, resp.Error)
+
+	result := resp.Result.(mcp.ToolResult)
+	assert.False(t, result.IsError)
+	text := result.Content[0].Text
+
+	// Prose content should be wrapped in code fences
+	assert.Contains(t, text, "```\n"+proseWithURLs+"\n```")
+	// Code content should use non-link format
+	assert.Contains(t, text, "--- Code (go) ---")
+	assert.NotContains(t, text, "[Code Block")
+	// Raw content preserved
+	assert.Contains(t, text, proseWithURLs)
+
+	mockRetriever.AssertExpectations(t)
 }

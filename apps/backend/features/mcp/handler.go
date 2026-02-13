@@ -306,7 +306,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 						textResult += fmt.Sprintf("SourceID: %s\n", res.SourceID)
 					}
 
-					textResult += fmt.Sprintf("Content:\n%s\n", res.Content)
+					textResult += fmt.Sprintf("Content:\n```\n%s\n```\n", res.Content)
 
 					// Optional: Show other metadata
 					// if len(res.Metadata) > 0 {
@@ -518,9 +518,9 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				textResult = fmt.Sprintf("Page: %s\nURL: %s\n\n", title, args.URL)
 				for _, res := range results {
 					if res.Type == "code" {
-						textResult += fmt.Sprintf("[Code Block: %s]\n%s\n\n", res.Language, res.Content)
+						textResult += fmt.Sprintf("--- Code (%s) ---\n%s\n\n", res.Language, res.Content)
 					} else {
-						textResult += fmt.Sprintf("%s\n\n", res.Content)
+						textResult += fmt.Sprintf("```\n%s\n```\n\n", res.Content)
 					}
 				}
 			}
