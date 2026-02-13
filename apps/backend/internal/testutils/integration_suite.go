@@ -177,6 +177,15 @@ func (s *IntegrationSuite) GetAppConfig() *config.Config {
 		WeaviateScheme: "http",
 		NSQDHost:       fmt.Sprintf("%s:%s", nHost, nPort.Port()),
 		NSQDHTTP:       fmt.Sprintf("%s:%s", nHost, nHTTPPort.Port()),
+
+		// Operational defaults (must match config.go defaults to avoid zero-value bugs)
+		ServerPort:                 8081,
+		IngestionConcurrency:       50,
+		BootstrapRetryAttempts:     10,
+		BootstrapRetryDelaySeconds: 2,
+		EnableAPI:                  true,
+		MaxUploadSizeMB:            50,
+		NSQMaxMsgSize:              10485760,
 	}
 }
 
