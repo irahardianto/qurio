@@ -7,6 +7,7 @@ Falls back gracefully on errors (404, timeout, invalid XML).
 """
 
 from urllib.parse import urljoin, urlparse
+from xml.etree.ElementTree import Element  # nosec B405
 from defusedxml import ElementTree
 
 import httpx
@@ -158,7 +159,7 @@ def _parse_sitemap_xml(
     return []
 
 
-def _extract_urls_from_urlset(root: ElementTree.Element, base_domain: str) -> list[str]:
+def _extract_urls_from_urlset(root: Element, base_domain: str) -> list[str]:
     """Extract <loc> URLs from a standard <urlset> sitemap."""
     urls: list[str] = []
 
@@ -175,7 +176,7 @@ def _extract_urls_from_urlset(root: ElementTree.Element, base_domain: str) -> li
     return list(set(urls))  # De-duplicate
 
 
-def _extract_sub_sitemap_urls(root: ElementTree.Element) -> list[str]:
+def _extract_sub_sitemap_urls(root: Element) -> list[str]:
     """Extract sub-sitemap <loc> URLs from a <sitemapindex>."""
     urls: list[str] = []
 

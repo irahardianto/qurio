@@ -283,3 +283,143 @@ func TestResultConsumer_HandleMessage_EmptyContent_NoEmbedPublish(t *testing.T) 
 	err := consumer.HandleMessage(msg)
 	assert.NoError(t, err)
 }
+
+func TestResultConsumer_HandleMessage_EmptyBody(t *testing.T) {
+	consumer := worker.NewResultConsumer(nil, nil, nil, nil, nil, nil)
+	msg := &nsq.Message{Body: []byte{}}
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err) // Empty body returns nil immediately
+}
+
+func TestResultConsumer_HandleMessage_FailureNonZeroDepth(t *testing.T) {
+	// Test that non-seed page failure does NOT update source status
+	u := new(MockUpdater)
+	j := new(MockJobRepo)
+	pm := new(MockPageManager)
+
+	consumer := worker.NewResultConsumer(nil, u, j, nil, pm, nil)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com/sub",
+		"status":    "failed",
+		"error":     "404 not found",
+		"depth":     1, // Non-zero: should NOT update source status
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com/sub", "failed", "404 not found").Return(nil)
+	// UpdateStatus should NOT be called because depth != 0
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+	u.AssertNotCalled(t, "UpdateStatus") // Source status unchanged for non-seed failures
+}
+
+func TestResultConsumer_HandleMessage_WithMetadata(t *testing.T) {
+	s := new(MockVectorStore)
+	u := new(MockUpdater)
+	sf := new(MockSourceFetcher)
+	pm := new(MockPageManager)
+	tp := new(MockTaskPublisher)
+
+	consumer := worker.NewResultConsumer(s, u, nil, sf, pm, tp)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com/doc.pdf",
+		"content":   "PDF content that is long enough to pass noise filter requirements.",
+		"title":     "My Document",
+		"metadata": map[string]interface{}{
+			"author":     "John Doe",
+			"created_at": "2024-01-15",
+			"pages":      float64(42),
+		},
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(0, []string{}, "", "Src", nil)
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com/doc.pdf").Return(nil)
+
+	// Verify metadata is passed through to embed payload
+	tp.On("Publish", config.TopicIngestEmbed, mock.MatchedBy(func(b []byte) bool {
+		var p worker.IngestEmbedPayload
+		json.Unmarshal(b, &p)
+		return p.Author == "John Doe" && p.CreatedAt == "2024-01-15" && p.PageCount == 42
+	})).Return(nil)
+
+	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com/doc.pdf", "completed", "").Return(nil)
+	pm.On("CountPendingPages", mock.Anything, "src1").Return(1, nil)
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+	tp.AssertExpectations(t)
+}
+
+func TestResultConsumer_HandleMessage_PublishEmbedError(t *testing.T) {
+	s := new(MockVectorStore)
+	sf := new(MockSourceFetcher)
+	tp := new(MockTaskPublisher)
+
+	consumer := worker.NewResultConsumer(s, nil, nil, sf, nil, tp)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com",
+		"content":   "Content that is long enough to be chunked and embedded by the worker.",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(0, []string{}, "", "Src", nil)
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
+	tp.On("Publish", config.TopicIngestEmbed, mock.Anything).Return(assert.AnError)
+
+	err := consumer.HandleMessage(msg)
+	assert.Error(t, err) // Durable: fails if publish fails
+	assert.Equal(t, assert.AnError, err)
+}
+
+func TestResultConsumer_HandleMessage_FailureWithNoOriginalPayload(t *testing.T) {
+	// Failure at depth 0 with no original_payload: should NOT save failed job
+	u := new(MockUpdater)
+	j := new(MockJobRepo)
+	pm := new(MockPageManager)
+
+	consumer := worker.NewResultConsumer(nil, u, j, nil, pm, nil)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com",
+		"status":    "failed",
+		"error":     "timeout",
+		"depth":     0,
+		// NO original_payload
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "failed", "timeout").Return(nil)
+	u.On("UpdateStatus", mock.Anything, "src1", "failed").Return(nil)
+	// jobRepo.Save should NOT be called because no original_payload
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+	j.AssertNotCalled(t, "Save")
+}
+
+func TestResultConsumer_HandleMessage_MissingSourceID(t *testing.T) {
+	consumer := worker.NewResultConsumer(nil, nil, nil, nil, nil, nil)
+
+	// URL present, source_id missing
+	payload := map[string]interface{}{"url": "http://example.com"}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err) // Dropped gracefully
+}

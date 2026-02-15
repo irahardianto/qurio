@@ -9,9 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"qurio/apps/backend/internal/settings"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"qurio/apps/backend/internal/settings"
 )
 
 // MockRepository is a mock implementation of settings.Repository
@@ -118,5 +119,28 @@ func TestHandler_UpdateSettings(t *testing.T) {
 		handler.UpdateSettings(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+	})
+
+	t.Run("ServiceError", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		svc := settings.NewService(mockRepo)
+		handler := settings.NewHandler(svc)
+
+		newSettings := &settings.Settings{
+			RerankProvider: "jina",
+			SearchAlpha:    0.7,
+		}
+
+		mockRepo.On("Update", mock.Anything, mock.MatchedBy(func(s *settings.Settings) bool {
+			return s.RerankProvider == "jina"
+		})).Return(errors.New("db write error"))
+
+		body, _ := json.Marshal(newSettings)
+		req := httptest.NewRequest("PUT", "/settings", bytes.NewBuffer(body))
+		w := httptest.NewRecorder()
+
+		handler.UpdateSettings(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Result().StatusCode)
 	})
 }

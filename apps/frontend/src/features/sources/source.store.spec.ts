@@ -246,4 +246,130 @@ describe("Source Store", () => {
     const url = fetchMock.mock.calls[0][0];
     expect(url).toContain("exclude_chunks=true");
   });
+
+  it("deleteSource handles API error", async () => {
+    const store = useSourceStore();
+    store.sources = [{ id: "1", name: "Keep Me" }];
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: "Server Error",
+    });
+
+    await store.deleteSource("1");
+
+    expect(store.error).toBe("Failed to delete source: Server Error");
+    expect(store.sources).toHaveLength(1); // Source NOT removed on error
+    expect(store.isLoading).toBe(false);
+  });
+
+  it("fetchChunks handles error and returns empty array", async () => {
+    const store = useSourceStore();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: "Not Found",
+    });
+
+    const chunks = await store.fetchChunks("1", 0, 100);
+
+    expect(chunks).toEqual([]);
+  });
+
+  it("getSourcePages handles error and returns empty array", async () => {
+    const store = useSourceStore();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: "Server Error",
+    });
+
+    const pages = await store.getSourcePages("1");
+
+    expect(pages).toEqual([]);
+  });
+
+  it("fetchSources with background=true skips loading state", async () => {
+    const store = useSourceStore();
+    const mockData = [{ id: "1", name: "Bg Source" }];
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockData }),
+    });
+
+    const promise = store.fetchSources(true);
+    // isLoading should NOT be set to true for background fetches
+    expect(store.isLoading).toBe(false);
+    await promise;
+
+    expect(store.sources).toEqual(mockData);
+    expect(store.isLoading).toBe(false);
+  });
+
+  it("startPolling is idempotent", () => {
+    const store = useSourceStore();
+    vi.useFakeTimers();
+
+    store.sources = [{ id: "1", name: "Test", status: "processing" }];
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    });
+
+    store.startPolling();
+    store.startPolling(); // Should not create duplicate
+
+    vi.advanceTimersByTime(2000);
+
+    // Should only be called once (one interval, not two)
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    store.stopPolling();
+    vi.useRealTimers();
+  });
+
+  it("fetchSources handles network exception", async () => {
+    const store = useSourceStore();
+
+    fetchMock.mockRejectedValueOnce(new Error("Network Error"));
+
+    await store.fetchSources();
+
+    expect(store.error).toBe("Network Error");
+    expect(store.isLoading).toBe(false);
+  });
+
+  it("resyncSource handles API error", async () => {
+    const store = useSourceStore();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: "Bad Gateway",
+    });
+
+    await store.resyncSource("1");
+
+    expect(store.error).toBe("Failed to resync source: Bad Gateway");
+    expect(store.isLoading).toBe(false);
+  });
+
+  it("uploadSource handles error when json parse fails", async () => {
+    const store = useSourceStore();
+    const file = new File(["content"], "test.pdf", { type: "application/pdf" });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      statusText: "Payload Too Large",
+      json: async () => {
+        throw new Error("parse error");
+      },
+    });
+
+    await expect(store.uploadSource(file, "test.pdf")).rejects.toThrow(
+      "Failed to upload source: Payload Too Large",
+    );
+    expect(store.error).toBe("Failed to upload source: Payload Too Large");
+  });
 });

@@ -341,3 +341,113 @@ func TestService_ResetStuckPages(t *testing.T) {
 	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
 }
+
+func TestService_Delete_ChunkStoreError(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	mockChunk.On("DeleteChunksBySourceID", mock.Anything, "src-1").Return(errors.New("weaviate error"))
+
+	err := svc.Delete(context.Background(), "src-1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "weaviate error")
+	// SoftDelete should NOT be called if chunk deletion fails
+	mockRepo.AssertNotCalled(t, "SoftDelete")
+}
+
+func TestService_Delete_SoftDeleteError(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	mockChunk.On("DeleteChunksBySourceID", mock.Anything, "src-1").Return(nil)
+	mockRepo.On("SoftDelete", mock.Anything, "src-1").Return(errors.New("db error"))
+
+	err := svc.Delete(context.Background(), "src-1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
+func TestService_Get_NotFound(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	mockRepo.On("Get", mock.Anything, "src-99").Return(nil, errors.New("sql: no rows"))
+
+	detail, err := svc.Get(context.Background(), "src-99", 10, 0, true)
+	assert.Error(t, err)
+	assert.Nil(t, detail)
+}
+
+func TestService_Get_ChunkCountError(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	mockRepo.On("Get", mock.Anything, "src-1").Return(&Source{ID: "src-1"}, nil)
+	mockChunk.On("CountChunksBySource", mock.Anything, "src-1").Return(0, errors.New("count error"))
+	mockChunk.On("GetChunks", mock.Anything, "src-1", 10, 0).Return([]worker.Chunk{{Content: "c1"}}, nil)
+
+	// Should succeed even if count fails (logs warning only)
+	detail, err := svc.Get(context.Background(), "src-1", 10, 0, true)
+	assert.NoError(t, err)
+	assert.NotNil(t, detail)
+	assert.Equal(t, 0, detail.TotalChunks) // Falls back to 0
+	assert.Len(t, detail.Chunks, 1)
+}
+
+func TestService_Get_ChunksError(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	mockRepo.On("Get", mock.Anything, "src-1").Return(&Source{ID: "src-1"}, nil)
+	mockChunk.On("CountChunksBySource", mock.Anything, "src-1").Return(10, nil)
+	mockChunk.On("GetChunks", mock.Anything, "src-1", 10, 0).Return([]worker.Chunk{}, errors.New("weaviate error"))
+
+	// Should succeed even if chunks fetch fails (returns empty chunks)
+	detail, err := svc.Get(context.Background(), "src-1", 10, 0, true)
+	assert.NoError(t, err)
+	assert.NotNil(t, detail)
+	assert.Equal(t, 10, detail.TotalChunks)
+	assert.Empty(t, detail.Chunks) // Falls back to empty
+}
+
+func TestService_ResetStuckPages_Error(t *testing.T) {
+	mockRepo := new(MockRepository)
+	svc := NewService(mockRepo, nil, nil, nil)
+
+	mockRepo.On("ResetStuckPages", mock.Anything, 5*time.Minute).Return(int64(0), errors.New("db error"))
+
+	err := svc.ResetStuckPages(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
+func TestService_ResetStuckPages_NoStuckPages(t *testing.T) {
+	mockRepo := new(MockRepository)
+	svc := NewService(mockRepo, nil, nil, nil)
+
+	mockRepo.On("ResetStuckPages", mock.Anything, 5*time.Minute).Return(int64(0), nil)
+
+	err := svc.ResetStuckPages(context.Background())
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_Get_DefaultLimit(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	mockRepo.On("Get", mock.Anything, "src-1").Return(&Source{ID: "src-1"}, nil)
+	mockChunk.On("CountChunksBySource", mock.Anything, "src-1").Return(5, nil)
+	// limit <= 0 should default to 100
+	mockChunk.On("GetChunks", mock.Anything, "src-1", 100, 0).Return([]worker.Chunk{}, nil)
+
+	detail, err := svc.Get(context.Background(), "src-1", 0, 0, true)
+	assert.NoError(t, err)
+	assert.NotNil(t, detail)
+}

@@ -320,3 +320,141 @@ async def test_nsq_concurrent_messages(nsq_containers):
 
     # Verify all 5 results were published
     assert len(mock_producer.published) == 5
+
+
+@pytest.mark.asyncio
+async def test_nsq_file_task_success(nsq_containers):
+    """
+    Test complete NSQ message flow for file task processing.
+    Verifies that process_message handles file tasks and publishes correct payload.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    async def mock_handle_file_task(path):
+        return [
+            {
+                "content": "# PDF Content\nExtracted text",
+                "url": path,
+                "path": path,
+                "title": "Test Document",
+                "metadata": {"author": "Test", "pages": 5},
+                "links": [],
+            }
+        ]
+
+    test_message = {
+        "id": "file-int-1",
+        "type": "file",
+        "path": "/tmp/test.pdf",  # nosec B108
+    }
+
+    mock_producer = MockProducer()
+    mock_msg = MockMessage(json.dumps(test_message).encode("utf-8"))
+
+    with patch("main.handle_file_task", new_callable=AsyncMock) as mock_handler:
+        mock_handler.side_effect = mock_handle_file_task
+
+        from main import process_message
+        import main
+
+        main.producer = mock_producer
+
+        await process_message(mock_msg)
+
+    assert mock_handler.call_count == 1
+    assert mock_msg._finished is True
+    assert len(mock_producer.published) == 1
+    result = mock_producer.published[0]["data"]
+    assert result["status"] == "success"
+    assert result["source_id"] == "file-int-1"
+    assert result["title"] == "Test Document"
+    assert result["metadata"]["author"] == "Test"
+    assert result["metadata"]["pages"] == 5
+
+
+@pytest.mark.asyncio
+async def test_nsq_missing_type_field(nsq_containers):
+    """
+    Test NSQ message flow with missing 'type' field.
+    Verifies graceful handling — no results, no crash.
+    """
+
+    test_message = {
+        "id": "missing-type-1",
+        # No "type" field
+        "url": "http://example.com",
+    }
+
+    mock_producer = MockProducer()
+    mock_msg = MockMessage(json.dumps(test_message).encode("utf-8"))
+
+    from main import process_message
+    import main
+
+    main.producer = mock_producer
+
+    await process_message(mock_msg)
+
+    # Should finish without crash but publish empty/failure result
+    assert mock_msg._finished is True
+
+
+@pytest.mark.asyncio
+async def test_nsq_multiple_results_published(nsq_containers):
+    """
+    Test that multiple result chunks are all published individually.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    async def mock_handle_web_task(url, **kwargs):
+        return [
+            {
+                "content": "Chunk 1",
+                "url": url + "/1",
+                "title": "P1",
+                "metadata": {},
+                "links": [],
+            },
+            {
+                "content": "Chunk 2",
+                "url": url + "/2",
+                "title": "P2",
+                "metadata": {},
+                "links": [],
+            },
+            {
+                "content": "Chunk 3",
+                "url": url + "/3",
+                "title": "P3",
+                "metadata": {},
+                "links": [],
+            },
+        ]
+
+    test_message = {
+        "id": "multi-result-1",
+        "type": "web",
+        "url": "http://example.com",
+    }
+
+    mock_producer = MockProducer()
+    mock_msg = MockMessage(json.dumps(test_message).encode("utf-8"))
+
+    with patch("main.handle_web_task", new_callable=AsyncMock) as mock_handler:
+        mock_handler.side_effect = mock_handle_web_task
+
+        from main import process_message
+        import main
+
+        main.producer = mock_producer
+
+        await process_message(mock_msg)
+
+    assert mock_msg._finished is True
+    assert len(mock_producer.published) == 3
+    assert mock_producer.published[0]["data"]["content"] == "Chunk 1"
+    assert mock_producer.published[1]["data"]["content"] == "Chunk 2"
+    assert mock_producer.published[2]["data"]["content"] == "Chunk 3"
+    # All should have same source_id
+    for p in mock_producer.published:
+        assert p["data"]["source_id"] == "multi-result-1"

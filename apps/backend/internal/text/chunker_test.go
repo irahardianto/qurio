@@ -112,9 +112,78 @@ func TestChunkProse(t *testing.T) {
 }
 
 func TestDetectChunkType(t *testing.T) {
-	assert.Equal(t, ChunkTypeAPI, detectChunkType("Swagger API Definition"))
-	assert.Equal(t, ChunkTypeAPI, detectChunkType("API Endpoint URL Method"))
-	assert.Equal(t, ChunkTypeProse, detectChunkType("Just some text"))
+	tests := []struct {
+		name    string
+		content string
+		want    ChunkType
+	}{
+		{"Swagger keyword", "Swagger API Definition", ChunkTypeAPI},
+		{"OpenAPI keyword", "This is an OpenAPI spec", ChunkTypeAPI},
+		{"Endpoint+Method+URL", "API Endpoint URL Method", ChunkTypeAPI},
+		{"Endpoint+Method+HTTP", "Endpoint Method HTTP request", ChunkTypeAPI},
+		{"Plain prose", "Just some text", ChunkTypeProse},
+		{"Code without API markers", "func main() { fmt.Println() }", ChunkTypeProse},
+		{"Empty string", "", ChunkTypeProse},
+		{"Case insensitive swagger", "this swagger spec defines", ChunkTypeAPI},
+		{"Case insensitive openapi", "OPENAPI 3.0 Specification", ChunkTypeAPI},
+		{"Partial match no API", "The endpoint is fast", ChunkTypeProse},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, detectChunkType(tt.content))
+		})
+	}
+}
+
+func TestChunkCode(t *testing.T) {
+	t.Run("Small block fits in one chunk", func(t *testing.T) {
+		content := "line1\nline2\nline3"
+		chunks := chunkCode(content, "go", ChunkTypeCode, 100)
+		assert.Len(t, chunks, 1)
+		assert.Contains(t, chunks[0].Content, "```go")
+		assert.Contains(t, chunks[0].Content, "line1")
+		assert.Contains(t, chunks[0].Content, "line3")
+		assert.Equal(t, ChunkTypeCode, chunks[0].Type)
+		assert.Equal(t, "go", chunks[0].Language)
+	})
+
+	t.Run("Large block splits by line", func(t *testing.T) {
+		// 10 tokens * 4 chars/token = 40 chars max per chunk
+		var lines []string
+		for i := 0; i < 10; i++ {
+			lines = append(lines, "1234567890") // 10 chars each
+		}
+		content := strings.Join(lines, "\n")
+		chunks := chunkCode(content, "python", ChunkTypeCode, 10)
+		assert.True(t, len(chunks) > 1, "should split into multiple chunks")
+		for _, c := range chunks {
+			assert.Contains(t, c.Content, "```python")
+			assert.Equal(t, ChunkTypeCode, c.Type)
+			assert.Equal(t, "python", c.Language)
+		}
+	})
+
+	t.Run("Empty content returns empty", func(t *testing.T) {
+		chunks := chunkCode("", "go", ChunkTypeCode, 100)
+		// Empty string still produces one chunk with just the fences
+		assert.Len(t, chunks, 1)
+		assert.Contains(t, chunks[0].Content, "```go")
+	})
+
+	t.Run("Preserves chunk type", func(t *testing.T) {
+		chunks := chunkCode("curl http://api.example.com", "bash", ChunkTypeCmd, 100)
+		assert.Len(t, chunks, 1)
+		assert.Equal(t, ChunkTypeCmd, chunks[0].Type)
+		assert.Equal(t, "bash", chunks[0].Language)
+	})
+
+	t.Run("Config type preserved", func(t *testing.T) {
+		content := `key: value
+another: setting`
+		chunks := chunkCode(content, "yaml", ChunkTypeConfig, 100)
+		assert.Len(t, chunks, 1)
+		assert.Equal(t, ChunkTypeConfig, chunks[0].Type)
+	})
 }
 
 func TestIsNoiseChunk(t *testing.T) {
